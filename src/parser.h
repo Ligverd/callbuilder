@@ -17,32 +17,51 @@
  *   Free Software Foundation, Inc.,                                       *
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
+#ifndef PARSER_H
+#define PARSER_H
 #include "CDRBuilder.h"
+#include <netinet/in.h>
 
 class CParser
 {
-	static int check_d(const char *str);
+	int check_d(const char *str);
+	void FreeListMem(CDRBuilding::TPCharList &lst);
+	bool make_nonblock(int fd);
+	bool Pipe(int *filedes);
+    int CheckIp(const char * ipstr);
 public:
-	char* sMainDir;
+
+	char* sInDir;
 	char* sOutDir;
-	char* sMainFile;
-	char* sResidFile;
-	char* sFreshResidFile;
+	char* sInRm3FileName;
+	char* sOutRm3FileName;
+	CDRBuilding::TPCharList TfsFileList;
 	char* sLogFileName;
 	char* sErrFileName;
 	char* sJrnFileName;
-	char* sMainFileName;
-	char* sSpiderIp;
-	unsigned char tfsFileType;
-	struct CDRBuilding::strJournalSettings pSett;
-	bool fMaxDurChanged;
-	bool fFormatChanged;
-	struct CDRBuilding::strCDRBuilderSettings pSSettings;
+	char* sTfsFileNameBase;
+    char* sLogFile;
+    unsigned char tfsFileType;
+    unsigned char rotation;
 	tm Tm;
-	int RefreshResidFileName (void);
-	int ParseCStringParams (int argc, char *argv[]);
+
+    char* sSpiderIp;
+    in_addr_t SpiderPort;
+    in_addr_t ServerPort;
+
 	bool fConvert;
 	bool fRem_rm3;
+
+    bool fDaemon;
+
+	struct CDRBuilding::strJournalSettings pSett;
+	struct CDRBuilding::strCDRBuilderSettings pSSettings;
+	
+	int RefreshResidFileName (void);
+	int ParseCStringParams (int argc, char *argv[]);
+	int FillMainParams (const char *CurrTfsFileName);
+    int FillOnLineParams (const char *CurrTfsFileName);
 	CParser();
 	~CParser();
 };
+#endif

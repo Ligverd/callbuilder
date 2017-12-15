@@ -17,21 +17,51 @@
  *   Free Software Foundation, Inc.,                                       *
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
+#ifndef CALLBUILDER_H
+#define CALLBUILDER_H
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/tcp.h>
+#include <pthread.h>
 
 #include "parser.h"
-#include "CBDialog.h"
 
 #include <CDRBuilder.h>
 #include <Errors.h>
 #include <time.h>
+#include <wait.h>
+
+#ifdef FREE_BSD
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <sys/queue.h>
+#include <netinet/tcp_var.h>
+#define TCP_KEEPIDLE TCPCTL_KEEPIDLE
+#define TCP_KEEPINTVL TCPCTL_KEEPINTVL
+#endif
+
+#define MAX_CONNECT_POINT 6
 
 #define WARNING printf("WARNING: file:%s line:%d\n",__FILE__,__LINE__);
 #define RETURNW {WARNING ; return -1;};
 #define RETURNERR(x) {printf((x)); return -1;};
+#define RETNOMEM {printf(("Error: Out of memory!")); return -1;};
 
+#define ROTATION_REALTIME 0
+#define ROTATION_DAY 1
+#define ROTATION_DECADE 2
+#define ROTATION_MONTH 3
+#define ROTATION_ONLINE 4
+#define ROTATION_FROM_ATS 5
+
+#endif

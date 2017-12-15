@@ -14,6 +14,7 @@
 #include <list>
 #include <string>
 
+//#pragma pack (push, 1)
 namespace CDRBuilding
 {
 //*****************************************************************************
@@ -135,12 +136,14 @@ struct strJournalSettings
 #define STRCALLINFOUNIT_RESERVED	50 - sizeof(TClock) - sizeof(DWORD) - sizeof(DWORD)  - sizeof(TClock) - sizeof(DWORD) 
 #define DVO_REDIR_BUFFER			100
 
+
 struct strCDRTrunkUnit
 {
 	char sTrunk[MAX_LEN_NUMBER]; 
 	char sCdPN[MAX_LEN_NUMBER];  //набранный номер
 	char sCgPN[MAX_LEN_NUMBER];  //АОН
 } ;
+
 
 struct strCDR
 {
@@ -153,8 +156,7 @@ struct strCDR
 	DWORD	dwSeizDurationOut;
 	DWORD	dwTalkDuration;
 	BYTE	btReason;
-} ;
-
+};
 
 
 struct strTime
@@ -235,8 +237,12 @@ struct strLocalNumbersSettings
 	strPrefix SPrefix;
 	TListInterval lstInterval;
 };
-
-
+//added by pax {
+#define LOWORD(X) ((WORD)(X))
+#define HIWORD(X) ((WORD)((X)>>16))
+#define LOBYTE(X) ((BYTE)(WORD)(X))
+#define HIBYTE(X) ((BYTE)(((WORD)(X)) >> 8))
+//}added by pax
 //*****************************************************************************
 //сам класс-обработчик
 class CCDRBuilder
@@ -338,5 +344,5 @@ private:
 	void CopyList(TPCharList& lstDest, const TPCharList& lstSrc);
 };
 }
-
+//#pragma pack (pop)
 #endif

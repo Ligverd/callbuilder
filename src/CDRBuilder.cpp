@@ -19,6 +19,7 @@ nafxcwd.lib(afxmem.obj) : error LNK2005: "void __cdecl operator delete(void *)" 
 #include "CDRBuilder.h"
 #include "Errors.h"
 #define _MSC_VER XXX;
+#define WARNING printf("WARNING: file:%s line:%d\n",__FILE__,__LINE__);
 //changed by pax
 
 #include  <include/unipar.h>
@@ -167,7 +168,7 @@ void CDRBuilding::CCDRBuilder::GetResiduaryCalls(CDRBuilding::strModuleInfo SMod
 {
 	memcpy(SModuleInfoArray, m_ModuleInfo, MAX_MOD*sizeof(strModuleInfo));
 	lstCallInfo.clear();
-	strCallInfo* pTmp, *pCallInfo = m_pBegListCall;		  
+	strCallInfo* pTmp, *pCallInfo = m_pBegListCall;
 	while(pCallInfo)
 	{
 		pTmp = new strCallInfo;
@@ -184,7 +185,7 @@ void CDRBuilding::CCDRBuilder::GetResiduaryCalls(CDRBuilding::strModuleInfo SMod
 void CDRBuilding::CCDRBuilder::CleanCalls(void)
 {
 	//очистка звонков
-	strCallInfo* pTmp, *pCallInfo = m_pBegListCall;		  
+	strCallInfo* pTmp, *pCallInfo = m_pBegListCall;
 	while(pCallInfo)
 	{
 		pTmp = pCallInfo->pNextCall;
@@ -200,6 +201,10 @@ void CDRBuilding::CCDRBuilder::CleanCalls(void)
 	FreeListMem(m_lstCDR);
 	FreeListMem(m_lstJour);
 	FreeListMem(m_lstErr);
+    //By pax{
+    ResetModuleInfo(ALL_MODULES);
+    m_dwLastError = ERROR_NONE;
+    //}By pax
 }
 
 DWORD CDRBuilding::CCDRBuilder::GetLastError(void)
@@ -539,8 +544,22 @@ void CDRBuilding::CCDRBuilder::OnAlive(CMonMessageEx& mes)
         //присваиваем новые значения
         //глобальное время
         m_ModuleInfo[btMod].LastAliveTime.dwGlTime = dwNewGlTime;
-        //реальное время    
-        memcpy((void*)&m_ModuleInfo[btMod].LastAliveTime.clock, pClock, sizeof(TClock));
+        //changed by pax{
+        //memcpy(&m_ModuleInfo[btMod].LastAliveTime.clock, pClock, sizeof(TClock));
+
+        m_ModuleInfo[btMod].LastAliveTime.clock.Control = pClock->Control;
+        m_ModuleInfo[btMod].LastAliveTime.clock.Seconds = pClock->Seconds;
+        m_ModuleInfo[btMod].LastAliveTime.clock.Minutes = pClock->Minutes;
+        m_ModuleInfo[btMod].LastAliveTime.clock.Hours = pClock->Hours;
+        m_ModuleInfo[btMod].LastAliveTime.clock.Day = pClock->Day;
+        m_ModuleInfo[btMod].LastAliveTime.clock.Date = pClock->Date;
+        m_ModuleInfo[btMod].LastAliveTime.clock.Month = pClock->Month;
+        m_ModuleInfo[btMod].LastAliveTime.clock.Year = pClock->Year;
+
+        //printf("pClock:%02d-%02d-%02d %02d:%02d:%02d\n", pClock->Date, pClock->Month, pClock->Year, pClock->Hours, pClock->Minutes, pClock->Seconds);
+
+        //printf("m_ModuleInfo.AliveClock:%02d-%02d-%02d %02d:%02d:%02d\n", m_ModuleInfo[btMod].LastAliveTime.clock.Date, m_ModuleInfo[btMod].LastAliveTime.clock.Month, m_ModuleInfo[btMod].LastAliveTime.clock.Year, m_ModuleInfo[btMod].LastAliveTime.clock.Hours, m_ModuleInfo[btMod].LastAliveTime.clock.Minutes, m_ModuleInfo[btMod].LastAliveTime.clock.Seconds);
+        //}changed by pax
     }
 }
 
@@ -599,7 +618,10 @@ DWORD CDRBuilding::CCDRBuilder::GetGlobalTime(BYTE btMod, BYTE btRelTime)
 BOOL CDRBuilding::CCDRBuilder::TransformMessageToString(CMonMessageEx& mes, char* pBuffer, int iBufferSize)
 {
 	int readPos = 0;    // mes.clearReadPosition();
-    char sInfo[500];
+    //changed by pax {
+    char sInfo[1000];
+    mes.monMessageToText(sInfo, 1000);
+    /*
     switch(mes.message())
     {
     case MON_ALIVE:
@@ -858,7 +880,7 @@ BOOL CDRBuilding::CCDRBuilder::TransformMessageToString(CMonMessageEx& mes, char
             sprintf(sInfo, "UNKNOWN MESSAGE %d",mes.message());
 
     }
-
+    */ //}changed by pax
 	BOOL bRes;
 	if(iBufferSize > (int)strlen(sInfo))
 	{
@@ -872,7 +894,8 @@ BOOL CDRBuilding::CCDRBuilder::TransformMessageToString(CMonMessageEx& mes, char
 	}
     return bRes;
 }
-
+//changed by pax{
+/*
 const char* CDRBuilding::CCDRBuilder::SigTypeToStr(BYTE sig)
 {
         switch (sig)
@@ -938,7 +961,9 @@ const char* CDRBuilding::CCDRBuilder::SigTypeToStr(BYTE sig)
             return "???(SIG - undefined)";
         }
     return "??? (???)";
-}
+}*/
+//}changed by pax
+
 DWORD* p1;
 
 void CDRBuilding::CCDRBuilder::OnComoverload(BYTE btMod)
@@ -1134,7 +1159,6 @@ void CDRBuilding::CCDRBuilder::OnSeizure(CMonMessageEx& mes)
     // ставим глобальное время
     pCall->InUnit.dwSeizGlTime = GetGlobalTime(btMod, mes.time());
 	WriteAliveTime(&pCall->InUnit);
-
     //вычисляем примерную дельту если Call пришел раньше 
 	if(pCall->OutUnit.dwID != 0 && m_ModDelta[pCall->InUnit.btMod][pCall->OutUnit.btMod] == MOD_DELTA_UNINIT && pCall->InUnit.btMod != pCall->OutUnit.btMod)
 	{
@@ -1164,6 +1188,7 @@ void CDRBuilding::CCDRBuilder::AddErrorString(const char* sStr)
 CDRBuilding::strCallInfo* CDRBuilding::CCDRBuilder::AddNewCall(void)
 {
     strCallInfo* pCall = new strCallInfo;
+
     memset(pCall->abReserved,0,STRCALLINFO_RESERVED);
     memset(pCall->acRedirBuf,0,DVO_REDIR_BUFFER);
     //если Seizure не придет
@@ -1632,6 +1657,7 @@ void CDRBuilding::CCDRBuilder::ReleaseCalls(BYTE btMod)
 
 void CDRBuilding::CCDRBuilder::ReleaseCall(CDRBuilding::strCallInfo* pCall, BYTE btReason)
 {
+
 #ifdef _DEBUG
 	if(pCall->InUnit.dwID == 0x8A810119)
 		int a = 2;
@@ -2089,7 +2115,7 @@ void CDRBuilding::CCDRBuilder::ReleaseCall(CDRBuilding::strCallInfo* pCall, BYTE
         sprintf(CDR.STrunkOutInfo.sTrunk, "%s%s", PREFIX_SUBSCRIBER, pToken);
 		sprintf(CDR.STrunkOutInfo.sCdPN, "%s", pToken);
 		strcpy(CDR.STrunkOutInfo.sCgPN, CDR.STrunkInInfo.sCgPN);
-		MakeCDR(CDR);
+        MakeCDR(CDR);
 
         pToken = strtok(NULL,"|]");
 		strcpy(CDR.STrunkInInfo.sTrunk, CDR.STrunkOutInfo.sTrunk);
@@ -2448,15 +2474,14 @@ void CDRBuilding::CCDRBuilder::OnCombine(CMonMessageEx& mes)
 void CDRBuilding::CCDRBuilder::MakeCDR(const CDRBuilding::strCDR& CDR)
 {
 	char sStr[1000];
-	//формируем дату и время начала звонка
-	TClock cl;
+    TClock cl;
+
 	if(CDR.dwTalkDuration == 0)
 		cl = CDR.timeSeizIn;
 	else
 		cl = AddToClock(CDR.timeSeizIn, (int)(CDR.dwSeizDurationIn - CDR.dwTalkDuration));
 	char sBegTalkDateTime[100];
 	sprintf(sBegTalkDateTime, "%02d-%02d-%02d %02d:%02d:%02d", cl.Date, cl.Month, cl.Year, cl.Hours, cl.Minutes, cl.Seconds);
-
 #define PCGPN_IN	CDR.STrunkInInfo.sCgPN[0] ? CDR.STrunkInInfo.sCgPN : m_SSettings.sNoNumberString
 #define PCDPN_IN	CDR.STrunkInInfo.sCdPN[0] ? CDR.STrunkInInfo.sCdPN : m_SSettings.sNoNumberString
 #define PCGPN_OUT	CDR.STrunkOutInfo.sCgPN[0] ? CDR.STrunkOutInfo.sCgPN : m_SSettings.sNoNumberString
@@ -3117,7 +3142,8 @@ void CDRBuilding::CCDRBuilder::FreeListMem(CDRBuilding::TPCharList& lst)
 	CDRBuilding::TPCharList::iterator it;
 	for(it = lst.begin(); it != lst.end(); it++)
 	{
-		delete *it;
+		//delete *it;
+		delete [] *it; //changed by pax
 	}
 	lst.clear();
 }
@@ -3130,9 +3156,13 @@ void CDRBuilding::CCDRBuilder::CopyList(CDRBuilding::TPCharList& lstDest, const 
 	for(it = lstSrc.begin(); it != lstSrc.end(); it++)
 	{
 		pTmp = new char[strlen(*it)+1];
-		strcpy(pTmp, *it);
-		lstDest.push_back(pTmp);
-
+		//strcpy(pTmp, *it);
+		//lstDest.push_back(pTmp);
+		if (pTmp) //changed by pax
+		{
+			strcpy(pTmp, *it);
+			lstDest.push_back(pTmp);
+		}
+		else WARNING;
 	}
 }
-

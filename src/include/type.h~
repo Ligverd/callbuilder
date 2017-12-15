@@ -5,7 +5,8 @@
     #include  <memory.h>
 #else
     #ifdef __GNUC__
-        #define _ATS_
+         #include  <iostream.h>
+        //#define _ATS_
     #else
         #define _WIN_
     #endif
