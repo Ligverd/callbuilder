@@ -92,6 +92,7 @@ public:
 
     bool fSS;
     bool fNoTarif;
+    bool fRadTrace;
 
     int ParseCStringParams (int argc, char *argv[], bool fFromFile);
     int Prepare( void );

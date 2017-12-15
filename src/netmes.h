@@ -190,7 +190,8 @@ public:
 };
 
 
-const   int     Max_NetMessageDataSize =  2*100 + sizeof(BYTE) + sizeof(TCallID) + sizeof(BYTE);
+//const   int     Max_NetMessageDataSize =  2*100 + sizeof(BYTE) + sizeof(TCallID) + sizeof(BYTE);
+const   int     Max_NetMessageDataSize =  300;
 class  CNetMessageBody : public CNetMessage 
 {
 public:

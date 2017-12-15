@@ -113,6 +113,9 @@ void CSMPClient::OnMessage(CNetMessageBody &net)
             if(!Parser.fRadAuthPrepay) //Схема prepay не включена
                 return;
 
+             if(Parser.fRadTrace)
+                Logerf("SMP Client %d: NET_MES_PREPAY_NUMBER_COMPLETE\n", con);
+
     #ifndef ARMLINUX
 
             int pos = 0;
@@ -137,7 +140,6 @@ void CSMPClient::OnMessage(CNetMessageBody &net)
                 dwLen |= *(pdata + pos++) << 16;
                 dwLen |= *(pdata + pos++) << 24;
 
-
                 CUniPar *p_unipar = (CUniPar *)(pdata + pos);
                 if(!p_unipar)
                 {
@@ -154,6 +156,9 @@ void CSMPClient::OnMessage(CNetMessageBody &net)
                 UniparAttr.len = dwLen;
                 UniparAttr.id = id;
                 UniparAttr.mod = net.src.nMod;
+
+                if(Parser.fRadTrace)
+                    printf("SMP Client %d: UNIPAR len=%d module=%d port_id=%d\n", con, dwLen, net.src.nMod, id);
 
                 AuthRadiusPrepay(&Parser, p_unipar, &UniparAttr);
             }

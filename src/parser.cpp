@@ -87,6 +87,7 @@ CParser::CParser()
 
     nRadiusSndRetry = 3;
     nRadiusSndTimeout = 5;
+    fRadTrace = false;
 }
 CParser::~CParser()
 {
@@ -477,6 +478,10 @@ int CParser::ParseCStringParams (int argc, char *argv[], bool fFromFile)
         else if(!strcmp(argv[i],"-notarif"))
         {
             fNoTarif = true;
+        }
+        else if(!strcmp(argv[i],"-radtrace"))
+        {
+            fRadTrace = true;
         }
         else if(!strcmp(argv[i],"-str2boff"))
         {

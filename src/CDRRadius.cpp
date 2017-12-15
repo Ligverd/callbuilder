@@ -33,6 +33,8 @@
 #include "UniNumber.h"
 #endif
 
+typedef int (*TMyPrint)(const char *format, ...);
+
 //дефайны из SMP/include/route.h
 #define DIR_NUMBER  ((DWORD)0x00000000) // по номеру телефона
 #define DIR_HARD    ((DWORD)0x40000000) // жесткая привязка из конфигурации для V5
@@ -50,7 +52,7 @@
 const BYTE VENDOR_CODE = 9;
 
 void Loger(const char* str);
-void Logerf(const char *format, ...);
+int Logerf(const char *format, ...);
 void SMPWritePacket (BYTE* data, short len );
 
 DWORD MakeDirBySpecial ( BYTE module, BYTE slot, BYTE hole )
@@ -155,6 +157,7 @@ void AuthRadiusPrepayAnswer( CUniPar &unipar, SUniparAttr &UniparAttr)
     *(data + pos++) = (BYTE)(UniparAttr.time >> 24);
 
     DWORD dwLen = 0;
+
     if(UniparAttr.time)
     {
         *(bool *)(data + pos) = true;
@@ -175,7 +178,8 @@ void AuthRadiusPrepayAnswer( CUniPar &unipar, SUniparAttr &UniparAttr)
     xmes.input((const uc *)data, pos);
     if(dwLen)
         xmes.input((const uc *)&unipar, dwLen);
-
+    if(Parser.fRadTrace)
+        Logerf("AuthRadiusPrepayAnswer: unipar len=%d module=%d port_id=%d credit_time=%d\n", dwLen, UniparAttr.mod, UniparAttr.id, UniparAttr.time);
     uc buf[sizeof(CNetMessageBody)];
     uc* p = xmes.encode(buf);
     short len = p - buf;
@@ -897,7 +901,7 @@ void CAuthRadiusPrepay::ThreadProc ( void )
     uint32_t        service;
     char            msg[1024];
     VALUE_PAIR      *send = NULL, *received = NULL;
-
+    TMyPrint myPrint = Parser.fRadTrace ? Logerf : printf;
     pthread_detach(pthread_self());
 
     switch (pParser->nRadiusAuthBilling)
@@ -996,6 +1000,18 @@ void CAuthRadiusPrepay::ThreadProc ( void )
             }
             */
 
+            if(Parser.fRadTrace)
+            {
+                VALUE_PAIR* vp = send;
+                while (vp)
+                {
+                    if(vp->strvalue)
+                        if(strlen(vp->strvalue))
+                            Logerf("Auth radius pr: send: sid: %s %s\n", session_id, vp->strvalue);
+                    vp = vp->next;
+                }
+            }
+
             int result = rc_auth(pParser->rh, 0, send, &received, msg);
 
             UniparAttr.time = 0;
@@ -1009,15 +1025,15 @@ void CAuthRadiusPrepay::ThreadProc ( void )
 
             if(result == OK_RC)
             {
-                VALUE_PAIR * vp = received;
+                VALUE_PAIR* vp = received;
                 while (vp)
                 {
                     if(vp->strvalue)
                     {
-                        char *s;
                         if(strlen(vp->strvalue))
                         {
-                            s = strstr(vp->strvalue, "h323-credit-time=");
+                            myPrint("Auth radius pr: Auth OK: sid: %s %s\n", session_id, vp->strvalue);
+                            char* s = strstr(vp->strvalue, "h323-credit-time=");
                             if(s)
                             {
                                 s += strlen("h323-credit-time=");
@@ -1028,7 +1044,6 @@ void CAuthRadiusPrepay::ThreadProc ( void )
                                         UniparAttr.time = (DWORD)t;
                                 }
                             }
-                            printf("Auth radius pr: Auth OK: sid: %s %s\n", session_id, vp->strvalue);
                         }
                     }
                     vp = vp->next;
@@ -1044,25 +1059,25 @@ void CAuthRadiusPrepay::ThreadProc ( void )
                 unipar.addNumber(UNIPAR_CalledNumber, &num);
                 unipar.addBuffer(UNIPAR_NUMBER, (const void*)sCalled, strlen(sCalled));
                 */
-
-                printf("Auth radius pr: Auth OK: %s -> %s\n\n", username, pCdPN);
+                myPrint("Auth radius pr: Auth OK: %s -> %s time=%d\n", username, pCdPN, UniparAttr.time);
                 if(pParser->sScommIp[0] && pParser->nScommPort)
                     AuthRadiusPrepayAnswer(unipar, UniparAttr);
             }
             else if(result == REJECT_RC)
             {
+                myPrint("Auth radius pr: Auth Rejected: sid: %s %s -> %s\n", session_id, username, pCdPN);
+
                 VALUE_PAIR *vp = received;
                 while (vp)
                 {
                     if(vp->strvalue)
                         if(strlen(vp->strvalue))
-                            printf("Auth radius pr: Auth Rejected: sid: %s %s\n",session_id, vp->strvalue);
+                            myPrint("Auth radius pr: Auth Rejected: sid: %s %s\n",session_id, vp->strvalue);
                     vp = vp->next;
                 }
-                printf("Auth radius pr: Auth Rejected: sid: %s %s -> %s\n\n", session_id, username, pCdPN);
             }
             else
-                printf("Auth radius pr: Auth Failed: sid: %s %s -> %s\n\n", session_id, username, pCdPN);
+                myPrint("Auth radius pr: Auth Failed: sid: %s %s -> %s\n", session_id, username, pCdPN);
 
             rc_avpair_free(send);
             rc_avpair_free(received);

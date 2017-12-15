@@ -99,7 +99,7 @@ void Loger(const char* str)
     StrToLog(logstr);
 }
 
-void Logerf(const char *format, ...)
+int Logerf(const char *format, ...)
 {
     char buff[512];
     va_list ap;
@@ -107,6 +107,7 @@ void Logerf(const char *format, ...)
     vsnprintf(buff, sizeof(buff), format, ap);
     va_end(ap);
     Loger(buff);
+    return 0;
 }
 
 
@@ -838,6 +839,7 @@ void Visualisation(const char* sCurrFileName)
         Logerf("scomm port:%u\n", Parser.nScommPort);
         if(Parser.sScommPassword[0]) Logerf("scomm password:%s\n", Parser.sScommPassword);
         if(Parser.fRadAuthPrepay) Loger("Authorization prepay\n");
+        if(Parser.fRadTrace) Loger("Radius trace enabled\n");
     }
     Logerf("Log file size:%d MB\n", Parser.nLogFileSize);
     Loger("<--------------------------------------------------------------------------->\n\n");
@@ -1063,197 +1065,1255 @@ void sig_SIGPIPE_hndlr(int signo)
     Loger("Signal SIGPIPE received!\n");
 }
 
-typedef unsigned long long  DDWORD; // 64
+//============================== класс CSIPMessage ==============================
+CSIPMessage::CSIPMessage(void)
+{
+    clearMessage();
+}
 
-#define  _ARM_
-#ifdef  _ARM_
-//  первая вуква - макрос ARM архитектуры
-//  вторая вуква R - считывание X - запись
-//  третья и четвёртая буквы - тип данных
+CSIPMessage::CSIPMessage(const char* message)
+{
+    MYASSERT(setMessage(message));
+}
 
-    #define LRW(X) _LRW(&(X))
-    #define LRS(X) _LRS(&(X))
-    #define LRD(X) _LRD(&(X))
-    #define LRI(X) _LRI(&(X))
-    #define LRDD(X) _LRDD(&(X))
+CSIPMessage::~CSIPMessage(void)
+{
+}
 
-    #define LXW(X, Y) _LXW(&(X), (Y))
-    #define LXS(X, Y) _LXS(&(X), (Y))
-    #define LXD(X, Y) _LXD(&(X), (Y))
-    #define LXI(X, Y) _LXI(&(X), (Y))
-    #define LXDD(X, Y) _LXDD(&(X), (Y))
+void CSIPMessage::clearMessage()
+{
+    m_sMessage[0] = 0;
+    m_MessageLen = 0;
+}
 
-    #define LARMCHECK(X)  {if (_LARMCHECK(X)) WARNING;}
+bool CSIPMessage::setMessage(const char* message)
+{
+    size_t len = strlen(message);
+    if(len >= sizeof(m_sMessage))
+        return false;
 
-    inline WORD _LRW ( WORD* X )
+    strcpy(m_sMessage, message);
+    m_MessageLen = len;
+    return true;
+}
+
+bool CSIPMessage::setMessage(const BYTE* data, size_t len)
+{
+    if(len >= sizeof(m_sMessage))
+        return false;
+
+    memcpy(m_sMessage, data, len);
+    m_sMessage[len] = '\0';
+//    MYASSERT(strlen(m_sMessage) == len);
+    m_MessageLen = len;
+    return true;
+}
+
+bool CSIPMessage::getMessage(char* buffer, size_t size) const
+{
+    if(!buffer)
+        return false;
+
+    if(size <= m_MessageLen)
+        return false;
+
+    strcpy(buffer, m_sMessage);
+    return true;
+}
+
+const char* CSIPMessage::getMessageHeaderPtr( void ) const
+{
+    if(!m_MessageLen)
+        return NULL;
+
+    char *ptr = strstr(m_sMessage, CRLF_CHARS);
+    if(!ptr)
+        return NULL;
+
+    while(*ptr == '\r' || *ptr == '\n')
+        ptr++;
+
+    if(*ptr == '\0')
+        return NULL;
+
+    if(ptr >= m_sMessage + m_MessageLen)
+        return NULL;
+
+    return ptr;
+}
+
+const char* CSIPMessage::getMessageBodyPtr( void ) const
+{
+    if(!m_MessageLen)
+        return NULL;
+
+    char *ptr = strstr(m_sMessage, "\r\n\r\n");
+    if(!ptr)
+        return NULL;
+
+    while(*ptr == '\r' || *ptr == '\n')
+        ptr++;
+
+    if(*ptr == '\0')
+        return NULL;
+
+    if(ptr >= m_sMessage + m_MessageLen)
+        return NULL;
+
+    return ptr;
+}
+
+bool CSIPMessage::addString(const char* str)
+{
+    size_t len = strlen(str);
+    MYASSERT_RET_FALSE((m_MessageLen + len + 2) < sizeof(m_sMessage));
+    strcat(m_sMessage, str);
+    m_MessageLen += len;
+    strcat(m_sMessage, CRLF_CHARS);
+    m_MessageLen += 2;
+    return true;
+}
+
+void CSIPMessage::trimBuffer(char* buffer)
+{
+    char *p = buffer;
+
+    while(*p == ' ')
+        p++;
+
+    if(p > buffer)
+        strcpy(buffer, p);
+
+    size_t len = strlen(buffer);
+    if(!len)
+        return;
+
+    p = &buffer[len - 1];
+
+    while(*p == ' ')
+        p--;
+
+    *(p + 1) = '\0';
+}
+
+const char* CSIPMessage::getShortHeaderName(const char* sFullHeaderName)
+{
+    if(sFullHeaderName == NULL)
+        return NULL;
+
+    const char* sRes = NULL;
+    if(!strcmp(sFullHeaderName, SIP_HEADER__CONTENT_TYPE))
+        sRes = SIP_HEADER_SHORT__CONTENT_TYPE;
+    else
+    if(!strcmp(sFullHeaderName, SIP_HEADER__CONTENT_ENCODING))
+        sRes = SIP_HEADER_SHORT__CONTENT_ENCODING;
+    else
+    if(!strcmp(sFullHeaderName, SIP_HEADER__FROM))
+        sRes = SIP_HEADER_SHORT__FROM;
+    else
+    if(!strcmp(sFullHeaderName, SIP_HEADER__CALL_ID))
+        sRes = SIP_HEADER_SHORT__CALL_ID;
+    else
+    if(!strcmp(sFullHeaderName, SIP_HEADER__CONTACT))
+        sRes = SIP_HEADER_SHORT__CONTACT;
+    else
+    if(!strcmp(sFullHeaderName, SIP_HEADER__CONTENT_LENGTH))
+        sRes = SIP_HEADER_SHORT__CONTENT_LENGTH;
+    else
+    if(!strcmp(sFullHeaderName, SIP_HEADER__SUBJECT))
+        sRes = SIP_HEADER_SHORT__SUBJECT;
+    else
+    if(!strcmp(sFullHeaderName, SIP_HEADER__TO))
+        sRes = SIP_HEADER_SHORT__TO;
+    else
+    if(!strcmp(sFullHeaderName, SIP_HEADER__VIA))
+        sRes = SIP_HEADER_SHORT__VIA;
+    return sRes;
+}
+
+
+bool CSIPMessage::__getNextHeader(char* buffer, size_t size, const char **last) const
+{
+    MYASSERT_RET_FALSE(buffer);
+    const char *start = *last;
+    char *end = strstr(start, CRLF_CHARS);
+
+    if(end)
     {
-        if (!(((DWORD)X) & 1))
-            return *X;
-        WORD ret;
-        ((BYTE*)&ret)[0] = ((BYTE*)X)[0];
-        ((BYTE*)&ret)[1] = ((BYTE*)X)[1];
-        return ret;
+        if(end == start)
+            return false;
+
+        size_t len = (size_t)(end - start);
+        MYASSERT_RET_FALSE(len < size);
+
+        strncpy(buffer, start, len);
+        buffer[len] = '\0';
+        *last = end + 2;
+        return true;
     }
 
-    inline short _LRS ( short* X )
+    return false;
+}
+
+bool CSIPMessage::getNextHeader(char* sHeaderName, size_t header_name_size, char* sHeader, size_t header_size, const char **last) const
+{
+    if(!m_MessageLen)
+        return false;
+
+    char str[500];
+    if(!__getNextHeader(str, sizeof(str), last))
+        return false;
+
+    trimBuffer(str);
+
+    if(strlen(str) >= header_size)
+        return false;
+    strcpy(sHeader, str);
+
+    char *v = strchr(str, ':');
+    if(v)
     {
-        if (!(((DWORD)X) & 1))
-            return *X;
-        short ret;
-        ((BYTE*)&ret)[0] = ((BYTE*)X)[0];
-        ((BYTE*)&ret)[1] = ((BYTE*)X)[1];
-        return ret;
+        *v = '\0';
+
+        trimBuffer(str);
+
+        if(strlen(str) >= header_name_size)
+            return false;
+        strcpy(sHeaderName, str);
+
+        return true;
     }
+    return false;
+}
 
-    inline DWORD _LRD ( DWORD* X )
+bool CSIPMessage::getHeaderByName(const char* sHeaderName, char* buffer, size_t size) const
+{
+    const char *last = getMessageHeaderPtr();
+    if(!last)
+        return false;
+
+    if(!sHeaderName)
+        return false;
+
+    size_t header_len = strlen(sHeaderName);
+    if(!header_len)
+        return false;
+
+    const char *sh = getShortHeaderName(sHeaderName);
+
+    while(__getNextHeader(buffer, size, &last))
     {
-        if (!(((DWORD)X) & 3))
-            return *X;
-        DWORD ret;
-        ((BYTE*)&ret)[0] = ((BYTE*)X)[0];
-        ((BYTE*)&ret)[1] = ((BYTE*)X)[1];
-        ((BYTE*)&ret)[2] = ((BYTE*)X)[2];
-        ((BYTE*)&ret)[3] = ((BYTE*)X)[3];
-        return ret;
-    }
-
-    inline int _LRI ( int* X )
-    {
-        if (!(((DWORD)X) & 3))
-            return *X;
-        int ret;
-        ((BYTE*)&ret)[0] = ((BYTE*)X)[0];
-        ((BYTE*)&ret)[1] = ((BYTE*)X)[1];
-        ((BYTE*)&ret)[2] = ((BYTE*)X)[2];
-        ((BYTE*)&ret)[3] = ((BYTE*)X)[3];
-        return ret;
-    }
-
-    inline DDWORD _LRDD ( DDWORD* X )
-    {
-        if (!(((DWORD)X) & 7))
-            return *X;
-        DDWORD ret;
-        ((BYTE*)&ret)[0] = ((BYTE*)X)[0];
-        ((BYTE*)&ret)[1] = ((BYTE*)X)[1];
-        ((BYTE*)&ret)[2] = ((BYTE*)X)[2];
-        ((BYTE*)&ret)[3] = ((BYTE*)X)[3];
-        ((BYTE*)&ret)[4] = ((BYTE*)X)[4];
-        ((BYTE*)&ret)[5] = ((BYTE*)X)[5];
-        ((BYTE*)&ret)[6] = ((BYTE*)X)[6];
-        ((BYTE*)&ret)[7] = ((BYTE*)X)[7];
-        return ret;
-    }
-
-    // ************************
-
-    inline void _LXW ( WORD* X, WORD Y )
-    {
-        if (!(((DWORD)X) & 1))
+        char *v = strchr(buffer, ':');
+        if(v)
         {
-            *X = Y;
-            return;
+            trimBuffer(buffer);
+
+            if(!strncmp(buffer, sHeaderName, header_len))
+                return true;
+            else if(sh)
+            {
+                if(*buffer == *sh)
+                    return true;
+            }
         }
-        ((BYTE*)X)[0] = ((BYTE*)&Y)[0];
-        ((BYTE*)X)[1] = ((BYTE*)&Y)[1];
     }
 
-    inline void _LXS ( short* X, short Y )
+    return false;
+}
+
+bool CSIPMessage::replaseHeaderByName(const char* sHeaderName, const char* sNewHeader)
+{
+    if(!sHeaderName)
+        return false;
+
+    size_t header_len = strlen(sHeaderName);
+    if(!header_len)
+        return false;
+
+    const char *sShortHeaderName = getShortHeaderName(sHeaderName);
+
+    if(!sNewHeader)
+        return false;
+
+    size_t new_len = strlen(sNewHeader);
+    if(!new_len)
+        return false;
+
+    const char *last = getMessageHeaderPtr();
+    if(!last)
+        return false;
+
+    char *first = const_cast<char *>(last);
+    char *p1 = const_cast<char *>(last);
+
+    char str[500];
+    while(__getNextHeader(str, sizeof(str), &last))
     {
-        if (!(((DWORD)X) & 1))
+        char *v = strchr(str, ':');
+        if(v)
         {
-            *X = Y;
-            return;
+            bool found = false;
+            if(!strncmp(str, sHeaderName, header_len))
+            {
+                found = true;
+            }
+            else if(sShortHeaderName)
+            {
+                if(*str == *sShortHeaderName)
+                    found = true;
+            }
+            if(found)
+            {
+                char *p2 = const_cast<char *>(last);
+                size_t slen = strlen(str) + 2; //CLRF
+                if(new_len > slen)
+                {
+                    size_t del = new_len - slen;
+                    if(m_MessageLen + del >= sizeof(m_sMessage))
+                        return false;
+                    memmove(p2 + del, p2, m_MessageLen - (size_t)(p2 - first));
+                    memcpy(p1, sNewHeader, new_len);
+                    m_MessageLen += del;
+                    return true;
+                }
+                else
+                {
+                    size_t del = slen - new_len;
+                    memcpy(p2 - del, p2, m_MessageLen - (size_t)(p2 - first));
+                    memcpy(p1, sNewHeader, new_len);
+                    m_MessageLen -= del;
+                    return true;
+                }
+            }
         }
-        ((BYTE*)X)[0] = ((BYTE*)&Y)[0];
-        ((BYTE*)X)[1] = ((BYTE*)&Y)[1];
+        p1 = const_cast<char *>(last);
     }
+    return false;
+}
 
-    inline void _LXD ( DWORD* X, DWORD Y )
+char* CSIPMessage::splitHeaderValueFromParams(const char* field)
+{
+    size_t len = strlen(field);
+    if(!len)
+        return NULL;
+
+    const char *p = field;
+    int nInB = 0; // < >
+    bool fInQ = false; // " "
+
+    for(size_t i = 0; i < len; i ++)
     {
-        if (!(((DWORD)X) & 3))
+        switch (p[i])
         {
-            *X = Y;
-            return;
+            case '<':
+                nInB++;
+            break;
+            case '>':
+                if(nInB > 0)
+                    nInB--;
+            break;
+            case '\"':
+                fInQ = !fInQ;
+            break;
+            default:;
         }
-        ((BYTE*)X)[0] = ((BYTE*)&Y)[0];
-        ((BYTE*)X)[1] = ((BYTE*)&Y)[1];
-        ((BYTE*)X)[2] = ((BYTE*)&Y)[2];
-        ((BYTE*)X)[3] = ((BYTE*)&Y)[3];
-    }
 
-    inline void _LXI ( int* X, int Y )
+        if( nInB || fInQ )
+            continue;
+
+        if ( p[i] == ';' )
+            return const_cast<char *>(&p[i]);
+     }
+    return NULL;
+}
+
+bool CSIPMessage::getHeaderValueByName(const char* sHeaderName, char* buffer, size_t size) const
+{
+    char str[500];
+    if(!getHeaderByName(sHeaderName, str, sizeof(str)))
+        return false;
+
+    char *v = strchr(str, ':');
+    if(v)
     {
-        if (!(((DWORD)X) & 3))
+        trimBuffer(++v);
+
+        char *p = splitHeaderValueFromParams(v);
+        if(p)
+            *p = '\0';
+
+        if(strlen(v) >= size)
+            return false;
+
+        strcpy(buffer, v);
+        return true;
+    }
+    return false;
+}
+
+bool CSIPMessage::getNextHeaderValue(char* header, size_t header_size, char* value, size_t value_size, const char **last) const
+{
+    if(!m_MessageLen)
+        return false;
+
+    char str[500];
+    if(!__getNextHeader(str, sizeof(str), last))
+        return false;
+
+    trimBuffer(str);
+
+    char *v = strchr(str, ':');
+    if(v)
+    {
+        *v++ = '\0';
+
+        trimBuffer(v);
+
+        char *p = splitHeaderValueFromParams(v);
+        if(p)
+            *p = '\0';
+
+        if(strlen(v) >= value_size)
+            return false;
+        strcpy(value, v);
+
+        trimBuffer(str);
+
+        if(strlen(str) >= header_size)
+            return false;
+        strcpy(header, str);
+
+        return true;
+    }
+    return false;
+}
+
+bool CSIPMessage::findHeaderParamByName(const char* sHeaderName, const char* sParamName) const
+{
+    size_t param_len = strlen(sParamName);
+    if(!param_len)
+        return false;
+
+    char str[500];
+    if(!getHeaderByName(sHeaderName, str, sizeof(str)))
+        return false;
+
+    char *v = strchr(str, ':');
+    if(!v)
+        return false;
+
+    char *start, *end = splitHeaderValueFromParams(++v);
+    if(!end)
+        return false;
+
+    do
+    {
+        start = end + 1;
+        end = strchr(start, ';');
+        if(end)
+            *end = '\0';
+
+        while(*start == ' ')
+            start++;
+
+        if(!strncmp(start, sParamName, param_len))
+            return true;
+
+    } while (end);
+
+    return false;
+}
+
+bool CSIPMessage::getHeaderParamValueByName(const char* sHeaderName, const char* sParamName, char* buffer, size_t size) const
+{
+    size_t param_len = strlen(sParamName);
+    if(!param_len)
+        return false;
+
+    char str[500];
+    if(!getHeaderByName(sHeaderName, str, sizeof(str)))
+        return false;
+
+    char *v = strchr(str, ':');
+    if(!v)
+        return false;
+
+    char *start, *end = splitHeaderValueFromParams(++v);
+    if(!end)
+        return false;
+
+    do
+    {
+        start = end + 1;
+        end = strchr(start, ';');
+        if(end)
+            *end = '\0';
+
+        while(*start == ' ')
+            start++;
+
+        if(!strncmp(start, sParamName, param_len))
         {
-            *X = Y;
-            return;
-        }
-        ((BYTE*)X)[0] = ((BYTE*)&Y)[0];
-        ((BYTE*)X)[1] = ((BYTE*)&Y)[1];
-        ((BYTE*)X)[2] = ((BYTE*)&Y)[2];
-        ((BYTE*)X)[3] = ((BYTE*)&Y)[3];
-    }
+            char *ch = strchr(start, '=');
+            if(ch)
+            {
+                if(strlen(++ch) >= size)
+                    return false;
 
-    inline void _LXDD ( DDWORD* X, DDWORD Y )
+                strcpy(buffer, ch);
+                return true;
+            }
+        }
+
+    } while (end);
+
+    return false;
+}
+
+bool CSIPMessage::retreiveParamFromHeader(const char* sParamName, const char* sHeader)
+{
+    if(!sHeader)
+        return false;
+
+    if(!sParamName)
+        return false;
+
+    size_t param_len = strlen(sParamName);
+
+    char *v = strchr(sHeader, ':');
+    if(!v)
+        return false;
+
+    char *start, *end = splitHeaderValueFromParams(++v);
+    if(!end)
+        return false;
+
+    do
     {
-        if (!(((DWORD)X) & 7))
+        start = end;
+        char *p = start + 1;
+        while(*p == ' ')
+            p++;
+        end = strchr(p, ';');
+        if(!strncmp(p, sParamName, param_len))
         {
-            *X = Y;
-            return;
+            if(end)
+                strcpy(start, end);
+            else
+                *start = '\0';
+            return true;
         }
-        ((BYTE*)X)[0] = ((BYTE*)&Y)[0];
-        ((BYTE*)X)[1] = ((BYTE*)&Y)[1];
-        ((BYTE*)X)[2] = ((BYTE*)&Y)[2];
-        ((BYTE*)X)[3] = ((BYTE*)&Y)[3];
-        ((BYTE*)X)[4] = ((BYTE*)&Y)[4];
-        ((BYTE*)X)[5] = ((BYTE*)&Y)[5];
-        ((BYTE*)X)[6] = ((BYTE*)&Y)[6];
-        ((BYTE*)X)[7] = ((BYTE*)&Y)[7];
-    }
 
-    inline bool _LARMCHECK ( void* X )
+    } while (end);
+
+    return false;
+}
+
+bool CSIPMessage::getBodyParamByName(const char ParamName, char* buffer, size_t size) const
+{
+    if(!m_MessageLen)
+        return false;
+
+    const char *last = getMessageBodyPtr();
+    if(!last)
+        return false;
+
+    char str[500];
+
+    while(__getNextHeader(str, sizeof(str), &last))
     {
-        return (((DWORD)X) & 3);
+        trimBuffer(str);
+
+        size_t len = strlen(str);
+        if(len > 2)
+        {
+            if(str[1] == '=')
+            {
+                if(str[0] == ParamName)
+                {
+                    char *v = &str[2];
+                    trimBuffer(v);
+                    if(strlen(v) >= size)
+                        return false;
+
+                    strcpy(buffer, v);
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool CSIPMessage::getBodyParamByName(const char *sParamName, char* buffer, size_t size) const
+{
+    if(!m_MessageLen)
+        return false;
+
+    const char *last = getMessageBodyPtr();
+    if(!last)
+        return false;
+
+    char str[500];
+
+    while(__getNextHeader(str, sizeof(str), &last))
+    {
+        trimBuffer(str);
+
+        char *v = strchr(str, '=');
+        if(v)
+        {
+            *v++ = '\0';
+            if(!strcmp(str, sParamName))
+            {
+                trimBuffer(v);
+                if(strlen(v) >= size)
+                    return false;
+
+                strcpy(buffer, v);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool CSIPMessage::getNextBodyParam(char *param, char* value, size_t value_size, const char **last) const
+{
+    char str[500];
+    if(!m_MessageLen)
+        return false;
+
+    if(!__getNextHeader(str, sizeof(str), last))
+        return false;
+
+    trimBuffer(str);
+
+    if(strlen(str) <= 2)
+        return false;
+
+    if(str[1] == '=')
+    {
+        *param = str[0];
+        char *sss = &str[2];
+        trimBuffer(sss);
+        if(strlen(sss) >= value_size)
+            return false;
+
+        strcpy(value, sss);
+        return true;
+    }
+    return false;
+}
+
+bool CSIPMessage::isRequest() const
+{
+    MYASSERT_RET_FALSE(m_MessageLen);
+    return !!strncmp(m_sMessage, SIP_CHARS, 7);
+}
+
+bool CSIPMessage::__getStartLine(char* buffer, size_t size) const
+{
+    const char *last = m_sMessage;
+    if(!__getNextHeader(buffer, size, &last)) //Skip start line
+        return false;
+    trimBuffer(buffer);
+    return true;
+}
+
+int CSIPMessage::getStatusCode( void ) const
+{
+    if(isRequest())
+        return -1;
+
+    char sTmpMessage[300];
+    if(!__getStartLine(sTmpMessage, sizeof(sTmpMessage)))
+        return -1;
+
+    // SIPS/2.0
+    char* p = strchr(sTmpMessage, ' ');
+    if(!p)
+        return -1;
+
+    *p++ = '\0';
+
+    //проверяем
+    if(strcmp(sTmpMessage, SIP_CHARS))
+        return -1;
+
+    return atoi(p);
+}
+
+bool CSIPMessage::getMessageType(char* buffer, size_t size) const
+{
+    if(!isRequest())
+        return false;
+
+    char sTmpMessage[300];
+    if(!__getStartLine(sTmpMessage, sizeof(sTmpMessage)))
+        return false;
+
+    char* p = strchr(sTmpMessage, ' ');
+    if(!p)
+        return false;
+
+    *p = '\0';
+
+    if(strlen(sTmpMessage) >= size)
+        return false;
+
+    strcpy(buffer, sTmpMessage);
+
+    return true;
+}
+
+bool CSIPMessage::getRequestURI(char* buffer, size_t size) const
+{
+    if(!isRequest())
+        return false;
+
+    char sTmpMessage[300];
+    if(!__getStartLine(sTmpMessage, sizeof(sTmpMessage)))
+        return false;
+
+    char* end = strrchr(sTmpMessage, ' ');
+    if(!end)
+        return false;
+
+    *end++ = '\0';
+
+    if(strcmp(end, SIP_CHARS))
+        return false;
+
+    char* start = strchr(sTmpMessage, ' ');
+    if(!start)
+        return false;
+
+    *start++ = '\0';
+
+    trimBuffer(start);
+
+    size_t len = strlen(start);
+    if(len < 4)
+        return false;
+
+    //now only sip (not sips or tel)
+    MYASSERT(!strncmp(start, "sip:", 4));
+
+    if(len >= size)
+        return false;
+
+    strcpy(buffer, start);
+
+    return true;
+}
+
+DWORD CSIPMessage::getCSeqNumber() const
+{
+    char str[300];
+    if(!getHeaderValueByName(SIP_HEADER__CSEQ, str, sizeof(str)))
+        return 0;
+
+    return (DWORD)atoi(str);
+}
+
+bool CSIPMessage::getCSeqMetod(char* buffer, size_t size) const
+{
+    char str[300];
+    if(!getHeaderValueByName(SIP_HEADER__CSEQ, str, sizeof(str)))
+        return false;
+
+    char* p = strrchr(str, ' ');
+
+    if(strlen(++p) >= size)
+        return false;
+
+    strcpy(buffer, p);
+
+    return true;
+}
+
+void CSIPMessage::trimBreakets( char* buffer )
+{
+    char *ch = strchr(buffer, '<');
+    if(ch)
+    {
+        strcpy(buffer, ++ch);
+        ch = strchr(buffer, '>');
+        MYASSERT_RET(ch);
+        *ch = '\0';
+    }
+}
+
+bool CSIPMessage::getUriFromHeader(const char* sHeaderName, char* buffer, size_t size) const
+{
+    char str[300];
+    if(!sHeaderName)
+        return false;
+
+    if(!getHeaderValueByName(sHeaderName, str, sizeof(str)))
+        return false;
+
+    trimBreakets(str);
+
+    if(strlen(str) >= size)
+        return false;
+    strcpy(buffer, str);
+
+    return true;
+}
+
+bool CSIPMessage::getUserHostPortFromHeader(const char* sHeaderName, char* user, size_t user_size, char* host, size_t host_size, WORD* port) const
+{
+    char str[300];
+    if(sHeaderName)
+    {
+        if(!getHeaderValueByName(sHeaderName, str, sizeof(str)))
+            return false;
+
+        trimBreakets(str);
+    }
+    else
+    {
+        if(!getRequestURI(str, sizeof(str)))
+            return false;
     }
 
-#else
-    #define LRW(X) (X)
-    #define LRS(X) (X)
-    #define LRD(X) (X)
-    #define LRI(X) (X)
-    #define LRDD(X) (X)
+    char* u = strstr(str, "sip:");
+    if(!u)
+        return false;
+    u += 4;
 
-    #define LXW(X, Y) ((X) = (Y))
-    #define LXS(X, Y) ((X) = (Y))
-    #define LXD(X, Y) ((X) = (Y))
-    #define LXI(X, Y) ((X) = (Y))
-    #define LXDD(X, Y) ((X) = (Y))
+    char* end;
+    if((end = strchr(u, ' ')) != NULL)
+        *end = '\0';
+    else if((end = strchr(u, ';')) != NULL)
+        *end = '\0';
 
-    #define LARMCHECK(X)
-#endif
+    char* h = strchr(u, '@');
+    if(!h)
+        return false;
+
+    *h++ = '\0';
+
+    if(user)
+    {
+        if(strlen(u) >= user_size)
+            return false;
+        strcpy(user, u);
+    }
+
+    char* p = strchr(h, ':');
+    if(!p)
+    {
+        if(host)
+        {
+            if(strlen(h) >= host_size)
+                return false;
+            strcpy(host, h);
+        }
+
+        return true;
+    }
+
+    *p++ = '\0';
+
+    if(host)
+    {
+        if(strlen(h) >= host_size)
+            return false;
+        strcpy(host, h);
+    }
+
+    if(port)
+        *port = (WORD)atoi(p);
+
+    return true;
+}
+
+bool CSIPMessage::getDisplayName(const char* sHeaderName, char* name, size_t size) const
+{
+    bool b = true;
+    if(!strcmp(sHeaderName, SIP_HEADER__FROM)) {}
+    else if (!strcmp(sHeaderName, SIP_HEADER__TO)) {}
+    else if (!strcmp(sHeaderName, SIP_HEADER__CONTACT)) {}
+    else
+        b = false;
+
+    if(!b)
+        return false;
+
+    char str[300];
+    if(!getHeaderValueByName(sHeaderName, str, sizeof(str)))
+            return false;
+
+    if(str[0] == '<')
+        return false;
+
+    char *ch = strchr(str, '<');
+    if(!ch)
+        return false;
+
+    *ch-- = '\0';
+
+    char *p = strchr(str, '\"');
+    if(p)
+    {
+        strcpy(str, ++p);
+        ch = strchr(str, '\"');
+        if(!ch)
+            return false;
+        *ch = '\0';
+
+        if(strlen(str) >= size)
+            return false;
+
+        strcpy(name, str);
+        return true;
+    }
+
+    while(*ch == ' ')
+        ch--;
+    *(ch + 1) = '\0';
+
+    if(strlen(str) >= size)
+        return false;
+
+    strcpy(name, str);
+    return true;
+}
+
+bool CSIPMessage::getHostPortFromVia(const char* Via, char* host, size_t host_size, WORD* port)
+{
+    char *ch = strchr(Via, ':');
+    if(!ch)
+        return false;
+
+    if(ch <= Via)
+        return false;
+
+    char *c = ch - 1;
+    while(*c == ' ')
+        c--;
+
+    if(strncmp(Via, SIP_HEADER__VIA, (size_t)(c - Via)))
+        return false;
+
+    ch++;
+    while(*ch == ' ')
+        ch++;
+
+    if(strncmp(ch, SIP_CHARS, 7))
+        return false;
+
+    ch += 7;
+    MYASSERT(!strncmp(ch, "/UDP", 4)); //Now only UDP
+    ch += 4;
+
+    while(*ch == ' ')
+        ch++;
+
+    char *p = strchr(ch, ':');
+    if(!p)
+        return false;
+
+    size_t len = (size_t)(p - ch);
+    if(len >= host_size)
+        return false;
+
+    strncpy(host, ch, len);
+    host[len] = '\0';
+
+    *port = (WORD)atoi(++p);
+
+    return true;
+}
+
+/* Specification.  */
+#include <string.h>
+
+#include <ctype.h>
+#include <limits.h>
+
+#define TOLOWER(Ch) (isupper (Ch) ? tolower (Ch) : (Ch))
+
+int m_strcasecmp (const char *s1, const char *s2)
+{
+  const unsigned char *p1 = (const unsigned char *) s1;
+  const unsigned char *p2 = (const unsigned char *) s2;
+  unsigned char c1, c2;
+
+  if (p1 == p2)
+    return 0;
+
+  do
+    {
+      c1 = TOLOWER (*p1);
+      c2 = TOLOWER (*p2);
+
+      if (c1 == '\0')
+        break;
+
+      ++p1;
+      ++p2;
+    }
+  while (c1 == c2);
+
+  if (UCHAR_MAX <= INT_MAX)
+    return c1 - c2;
+  else
+    /* On machines where 'char' and 'int' are types of the same size, the
+       difference of two 'unsigned char' values - including the sign bit -
+       doesn't fit in an 'int'.  */
+    return (c1 > c2 ? 1 : c1 < c2 ? -1 : 0);
+}
+
+int m_strncasecmp (const char *s1, const char *s2, size_t n)
+{
+  register const unsigned char *p1 = (const unsigned char *) s1;
+  register const unsigned char *p2 = (const unsigned char *) s2;
+  unsigned char c1, c2;
+
+  if (p1 == p2 || n == 0)
+    return 0;
+
+  do
+    {
+      c1 = TOLOWER (*p1);
+      c2 = TOLOWER (*p2);
+
+      if (--n == 0 || c1 == '\0')
+        break;
+
+      ++p1;
+      ++p2;
+    }
+  while (c1 == c2);
+
+  if (UCHAR_MAX <= INT_MAX)
+    return c1 - c2;
+  else
+    /* On machines where 'char' and 'int' are types of the same size, the
+       difference of two 'unsigned char' values - including the sign bit -
+       doesn't fit in an 'int'.  */
+    return (c1 > c2 ? 1 : c1 < c2 ? -1 : 0);
+}
+    typedef int (*TMyPrint)(const char *format, ...);
+
+    static bool Pipe(int *filedes)
+    {
+        if (pipe(filedes) < 0)
+            return false;
+        return true;
+    }
+    #include <list>
+    typedef std::list<char*> TPCharList;
+    static void FreeListMem(TPCharList &lst)
+    {
+        TPCharList::iterator it;
+        for(it = lst.begin(); it != lst.end(); it++)
+            delete [] *it;
+        lst.clear();
+    }
+    #define Sleep(X) usleep((X)*1000)
+    bool ExecCommand(TMyPrint MyPrint, const char *command, const char *param, bool fWait)
+    {
+        char **p;
+        size_t size = 0;
+        TPCharList List;
+
+        if(param)
+        {
+            char *start = (char *)param, *end = start;
+
+            while (*end)
+            {
+                while(*end == ' ')
+                    end++;
+
+                if(*end == '\0')
+                    break;
+
+                start = end;
+
+                while(*end && *end != ' ')
+                    end++;
+
+                size_t len = (size_t)(end - start);
+                if(len)
+                {
+                    char *v = new char[len + 1];
+                    if(!v)
+                    {
+                        if(MyPrint)
+                            MyPrint("ExecCmd: out of memory");
+                        FreeListMem(List);
+                        return false;
+                    }
+                    memcpy(v, start, len);
+                    v[len] = '\0';
+                    List.push_back(v);
+                }
+            }
+            size = List.size();
+        }
+
+        p = new char*[size + 2];
+        if(!p)
+        {
+            if(MyPrint)
+                MyPrint("ExecCmd: out of memory");
+            FreeListMem(List);
+            return false;
+        }
+
+        p[0] = (char *)command;
+        if(size)
+        {
+            int i = 1;
+            TPCharList::const_iterator it;
+            for (it = List.begin(); it != List.end(); it++, i++)
+                p[i] = (char *)*it;
+        }
+        p[size + 1] = NULL;
+
+        int pid, filedes[2];
+
+        if (!Pipe(filedes))
+        {
+            if(MyPrint)
+                MyPrint("ExecCmd: Pipe error");
+            FreeListMem(List);
+            delete[] p;
+            return false;
+        }
+        if (!(make_nonblock(filedes[0])
+            && make_nonblock(filedes[1])))
+        {
+            if(MyPrint)
+                MyPrint("ExecCmd: nonblock error");
+            close(filedes[0]);
+            close(filedes[1]);
+            FreeListMem(List);
+            delete[] p;
+            return false;
+        }
+
+        int ok = 0;
+        pid = fork();
+        switch (pid)
+        {
+            case -1:
+                if(MyPrint)
+                    MyPrint("ExecCmd: Fork error");
+                close(filedes[0]);
+                close(filedes[1]);
+                FreeListMem(List);
+                delete[] p;
+                return false;
+            case 0:
+            {
+                dup2(filedes[1], 1);
+                if (execv(command, p) < 0)
+                    printf("Exec error\n");
+                exit(EXIT_FAILURE);
+            }
+            default:
+            {
+                FreeListMem(List);
+                delete[] p;
+
+                if(fWait)
+                    wait(&ok);
+                else
+                    Sleep(100);
+
+                fd_set rset;
+
+                FD_ZERO(&rset);       // Set Zero
+                FD_SET(filedes[0], &rset);
+                struct timeval tv;
+
+                tv.tv_sec = 1;
+                tv.tv_usec = 0;
+                char str[1024];
+
+                if ((select(filedes[0] + 1, &rset, NULL, NULL, &tv)) > 0)
+                {
+                    char *ch = str;
+                    while (read(filedes[0], ch++, 1) == 1)
+                    {
+                        if (*(ch - 1) == '\n' || *(ch - 1) == '\r')
+                        {
+                            *(ch - 1) = 0;
+                            if(MyPrint)
+                                MyPrint("ExecCmd: %s\n", str);
+                            ch = str;
+                        }
+                    }
+                }
+            }
+        }
+        close(filedes[0]);
+        close(filedes[1]);
+        if(ok)
+            return false;
+        return true;
+    }
 
 //============================== класс CSIPMessage ==============================
 
 int main(int argc, char *argv[])
 {
+    //ExecCommand(printf, "/bin/ls", "-1 -a -l", true);
+    //ExecCommand(printf, "/bin/ls", "", true);
+    //ExecCommand(printf, "/bin/ls", NULL, true);
 
-    BYTE buf[10];
-    LXDD(*(DDWORD*)(buf + 1), 0xAABBCCDDEEFF1122ULL);
-    DDWORD dir = LRDD(*(DDWORD*)&buf[1]);
-    /*
-    printf("std::string%d\n",sizeof(std::string));
-    printf("TClock:%d\n",sizeof(TClock));
-    printf("strCDRTrunkUnit:%d\n",sizeof(CDRBuilding::strCDRTrunkUnit));
-    printf("strCDR:%d\n",sizeof(CDRBuilding::strCDR));
-    printf("strTime:%d\n",sizeof(CDRBuilding::strTime));
-    printf("strCallInfoUnit:%d\n",sizeof(CDRBuilding::strCallInfoUnit));
-    printf("strCallInfo:%d\n",sizeof(CDRBuilding::strCallInfo));
-    printf("strModuleInfo:%d\n",sizeof(CDRBuilding::strModuleInfo));
-    printf("strLocalNumbersSettings:%d\n",sizeof(CDRBuilding::strLocalNumbersSettings));
-    printf("CCDRBuilder:%d\n",sizeof(CDRBuilding::CCDRBuilder));
-    */
-
+#if 0
+    CSIPMessage m_GlMesReceived;
+    m_GlMesReceived.setMessage
+(
+"INVITE sip:412@192.168.5.123 SIP/2.0\r\n\
+To: 412 <sip:412@192.168.5.123>\r\n\
+v: SIP/2.0/UDP 192.168.5.174:5060;branch=z9hG4bK264816501892718566;rport;delete\r\n\
+From: pax <sip:pax@192.168.5.123>;tag=16575257\r\n\
+Call-ID: 285991115711115-5590190954521@192.168.5.174\r\n\
+CSeq: 1 INVITE\r\n\
+Contact: <sip:pax@192.168.5.174:5060>\r\n\
+Max-Forwards: 70\r\n\
+Supported: replaces\r\n\
+User-Agent: Voip Phone 1.0\r\n\
+Allow: INVITE, ACK, OPTIONS, BYE, CANCEL, REFER, NOTIFY, INFO, SUBSCRIBE, PRACK, UPDATE\r\n\
+Content-Type: application/sdp\r\n\
+Content-Length: 314\r\n\
+\r\n\
+v=0\r\n\
+o=pax 22647238 20978217 IN IP4 192.168.5.174\r\n\
+s=A conversation\r\n\
+c=IN IP4 192.168.5.174\r\n\
+t=0 0\r\n\
+m=audio 10006 RTP/AVP 8 4 18 0 9 101\r\n\
+a=rtpmap:8 PCMA/8000\r\n\
+a=rtpmap:4 G723/8000\r\n\
+a=rtpmap:18 G729/8000\r\n\
+a=rtpmap:0 PCMU/8000\r\n\
+a=rtpmap:9 G722/16000\r\n\
+a=rtpmap:101 telephone-event/8000\r\n\
+a=fmtp:101 0-15\r\n\
+a=sendrecv\r\n"
+);
+    char str[MAX_VIA_HEADER_STRING_LEN];
+    str[0] = 0;
+    MYASSERT(m_GlMesReceived.getHeaderByName(SIP_HEADER__VIA, str, sizeof(str)));
+    if(m_GlMesReceived.retreiveParamFromHeader("rport", str))
+    {
+        strcat(str, ";received=");
+        strcat(str, "192.168.5.123");
+        strcat(str, ";rport=");
+        strcat(str, "5060");
+    }
+    MYASSERT(m_GlMesReceived.replaseHeaderByName(SIP_HEADER__VIA, str));
+#endif
     sigfillset(&sact.sa_mask);
     sact.sa_flags = 0;
     sact.sa_handler = sig_SIGTERM_hndlr;
