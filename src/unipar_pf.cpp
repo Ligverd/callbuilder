@@ -1,6 +1,6 @@
 // UniPar platform function
 
-#include  <include/unipar.h>
+#include  <unipar.h>
 #include  <string.h>
 
 #ifdef _ATS_

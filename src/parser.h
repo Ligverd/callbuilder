@@ -17,53 +17,92 @@
  *   Free Software Foundation, Inc.,                                       *
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
-#ifndef PARSER_H
-#define PARSER_H
+#ifndef _PARSER_H
+#define _PARSER_H
+
 #include "CDRBuilder.h"
+#include "radius_freeradius-client.h"
 #include <netinet/in.h>
+
 
 class CParser
 {
-	int check_d(const char *str);
-	void FreeListMem(CDRBuilding::TPCharList &lst);
-	bool make_nonblock(int fd);
-	bool Pipe(int *filedes);
+    int ParseConigFile( const char *filename, CDRBuilding::TPCharList &CfgList );
+    int check_d( const char *str );
+    void FreeListMem(CDRBuilding::TPCharList &lst);
+    bool make_nonblock(int fd);
+    bool Pipe(int *filedes);
     int CheckIp(const char * ipstr);
+    void PrintHelp(void);
+
 public:
 
-	char* sInDir;
-	char* sOutDir;
-	char* sInRm3FileName;
-	char* sOutRm3FileName;
-	CDRBuilding::TPCharList TfsFileList;
-	char* sLogFileName;
-	char* sErrFileName;
-	char* sJrnFileName;
-	char* sTfsFileNameBase;
+    char* sInDir;
+    char* sOutDir;
+    char* sInRm3FileName;
+    char* sOutRm3FileName;
+    CDRBuilding::TPCharList TfsFileList;
+    char* sLogFileName;
+    char* sErrFileName;
+    char* sJrnFileName;
+    char* sTfsFileNameBase;
     char* sLogFile;
+    unsigned int nLogFileSize;
     unsigned char tfsFileType;
     unsigned char rotation;
-	tm Tm;
+    tm Tm;
 
     char* sSpiderIp;
     in_addr_t SpiderPort;
     in_addr_t ServerPort;
 
-	bool fConvert;
-	bool fRem_rm3;
+    bool fConvert;
+    bool fRem_rm3;
 
     bool fDaemon;
 
     struct CDRBuilding::strCDRBuilderSettings SSettings;
-	struct CDRBuilding::strJournalSettings Sett;
+    struct CDRBuilding::strJournalSettings Sett;
     CDRBuilding::TListInterval lstLocalNumbers;
     CDRBuilding::strPrefix SPrefix;
-	
-	int RefreshResidFileName (void);
-	int ParseCStringParams (int argc, char *argv[]);
-	int FillMainParams (const char *CurrTfsFileName);
+
+    //radius params
+    char sRadiusAccIp[100];
+    unsigned short nRadiusAccPort;
+    char sRadiusAccSecret[100];
+    unsigned int nRadiusAccBilling;
+
+    char sRadiusAuthIp[100];
+    unsigned short nRadiusAuthPort;
+    char sRadiusAuthSecret[100];
+    unsigned int nRadiusAuthBilling;
+    char sScommIp[100];
+    unsigned short nScommPort;
+    char sScommPassword[20];
+    bool fRadAuthPrepay;
+
+    char sRadiusConfigFile[100];
+    char sRadiusDictionaryFile[100];
+    char sRadiusSeqFile[100];
+
+
+    unsigned int nRadiusSndRetry;
+    unsigned int nRadiusSndTimeout;
+    rc_handle *rh;
+
+    bool fSS;
+    bool fNoTarif;
+
+    int ParseCStringParams (int argc, char *argv[], bool fFromFile);
+    int Prepare( void );
+    int FillMainParams (const char *CurrTfsFileName);
     int FillOnLineParams (const char *CurrTfsFileName);
-	CParser();
-	~CParser();
+    int RefreshResidFileName (void);
+
+    CParser();
+    ~CParser();
 };
+
+extern CParser Parser;
+
 #endif

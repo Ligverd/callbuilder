@@ -40,12 +40,9 @@
 #include <Errors.h>
 #include <time.h>
 
+
 #ifndef CYGWIN
-    #ifdef FREE_BSD
-        #include <sys/wait.h>
-    #else
-        #include <wait.h>
-    #endif
+    #include <sys/wait.h>
 #endif
 
 #ifdef FREE_BSD
@@ -60,16 +57,28 @@
 
 #define MAX_CONNECT_POINT 6
 
+#ifndef __FILE__
+#error Undefined macro __FILE__
+#endif
+
+#ifndef __LINE__
+#error Undefined macro __LINE__
+#endif
 #define WARNING printf("WARNING: file:%s line:%d\n",__FILE__,__LINE__);
+
 #define RETURNW {WARNING ; return -1;};
-#define RETURNERR(x) {printf((x)); return -1;};
-#define RETNOMEM {printf(("Error: Out of memory!")); return -1;};
+#define RETURNERR(x) {Loger((x)); return -1;};
+#define RETNOMEM {Loger(("Error: Out of memory!")); return -1;};
 
 #define ROTATION_REALTIME 0
 #define ROTATION_DAY 1
 #define ROTATION_DECADE 2
 #define ROTATION_MONTH 3
 #define ROTATION_ONLINE 4
+//fictions
 #define ROTATION_FROM_ATS 5
+#define ROTATION_FROM_SS 6
 
-#endif
+#include <config.h>
+
+#endif //CALLBUILDER_H

@@ -47,8 +47,17 @@ CONFIG_CLEAN_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
-am_callbuilder_OBJECTS = callbuilder.$(OBJEXT) parser.$(OBJEXT) \
-	CDRBuilder.$(OBJEXT) monmessage.$(OBJEXT) unipar_pf.$(OBJEXT)
+am_callbuilder_OBJECTS = CDRBuilder.$(OBJEXT) CDRRadius.$(OBJEXT) \
+	UniNumber.$(OBJEXT) callbuilder.$(OBJEXT) \
+	callbuilder_help.$(OBJEXT) client.$(OBJEXT) \
+	monmessage.$(OBJEXT) netmes.$(OBJEXT) parser.$(OBJEXT) \
+	radius_avapair.$(OBJEXT) radius_buildreq.$(OBJEXT) \
+	radius_cliedtid.$(OBJEXT) radius_config.$(OBJEXT) \
+	radius_dict.$(OBJEXT) radius_env.$(OBJEXT) \
+	radius_ip_util.$(OBJEXT) radius_lock.$(OBJEXT) \
+	radius_log.$(OBJEXT) radius_md5.$(OBJEXT) \
+	radius_sendserver.$(OBJEXT) radius_util.$(OBJEXT) \
+	systcp.$(OBJEXT) unipar.$(OBJEXT) unipar_pf.$(OBJEXT)
 callbuilder_OBJECTS = $(am_callbuilder_OBJECTS)
 callbuilder_LDADD = $(LDADD)
 callbuilder_LINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) \
@@ -73,6 +82,7 @@ ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
+ALLOCA = @ALLOCA@
 AMTAR = @AMTAR@
 AR = @AR@
 AUTOCONF = @AUTOCONF@
@@ -124,6 +134,8 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 RANLIB = @RANLIB@
+RC_LOG_FACILITY = @RC_LOG_FACILITY@
+RC_SECURE_PATH = @RC_SECURE_PATH@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -181,7 +193,11 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-callbuilder_SOURCES = callbuilder.cpp parser.cpp CDRBuilder.cpp monmessage.cpp \
+callbuilder_SOURCES = CDRBuilder.cpp CDRRadius.cpp UniNumber.cpp \
+	callbuilder.cpp callbuilder_help.cpp client.cpp monmessage.cpp netmes.cpp parser.cpp \
+	radius_avapair.cpp radius_buildreq.cpp radius_cliedtid.cpp radius_config.cpp \
+	radius_dict.cpp radius_env.cpp radius_ip_util.cpp radius_lock.cpp radius_log.cpp \
+	radius_md5.cpp radius_sendserver.cpp radius_util.cpp systcp.cpp unipar.cpp \
 	unipar_pf.cpp
 
 
@@ -189,8 +205,12 @@ callbuilder_SOURCES = callbuilder.cpp parser.cpp CDRBuilder.cpp monmessage.cpp \
 INCLUDES = $(all_includes)
 
 # the library search path.
-callbuilder_LDFLAGS = $(all_libraries) 
-noinst_HEADERS = parser.h callbuilder.h CDRBuilder.h Errors.h
+callbuilder_LDFLAGS = $(all_libraries) -lpthread
+noinst_HEADERS = CDRBuilder.h CDRRadius.h Errors.h UniNumber.h callbuilder.h \
+	client.h dictionary dictionary.cisco lib.h message.h monmessage.h netmes.h \
+	parser.h radius_freeradius-client.h radius_includes.h radius_md5.h \
+	radius_messages.h radius_options.h radius_pathnames.h systcp.h type.h unipar.h
+
 all: all-am
 
 .SUFFIXES:
@@ -204,9 +224,9 @@ $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu  src/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign  src/Makefile'; \
 	cd $(top_srcdir) && \
-	  $(AUTOMAKE) --gnu  src/Makefile
+	  $(AUTOMAKE) --foreign  src/Makefile
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
@@ -263,9 +283,28 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/CDRBuilder.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/CDRRadius.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/UniNumber.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/callbuilder.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/callbuilder_help.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/monmessage.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/netmes.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/parser.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radius_avapair.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radius_buildreq.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radius_cliedtid.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radius_config.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radius_dict.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radius_env.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radius_ip_util.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radius_lock.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radius_log.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radius_md5.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radius_sendserver.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radius_util.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/systcp.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/unipar.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/unipar_pf.Po@am__quote@
 
 .cpp.o:

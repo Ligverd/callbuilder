@@ -1,19 +1,7 @@
 #ifndef __TYPE_H__
 #define __TYPE_H__
 
-#ifdef  ARM
-    #include  <memory.h>
-#else
-    #ifdef __GNUC__
-        #ifdef ARMLINUX
-            #define ARM
-            #define __ARM__
-        #endif
-        #include  <string.h>
-    #else
-        #define _WIN_
-    #endif
-#endif
+#include  <string.h>
 
 #define DEV_NONE 0
 #define DEV_MAL  1
@@ -29,25 +17,6 @@
 #define DEVICE_ISDN (glDevice == DEV_ISDN)
 #define DEVICE_C412 (glDevice == DEV_C412)
 
-#ifdef WIN32
-    #include "windows.h"
-#endif
-
-//typedef char FLAG;
-
-#ifdef _ATS_
-
-//    typedef char BOOL;
-
-    #define NULL 0
-
-    #define LOWORD(X) ((WORD)(X))
-    #define HIWORD(X) ((WORD)((X)>>16))
-
-    #pragma pack(1)
-
-#endif
-
 
 #define NOP5 { __asm("nop"); __asm("nop"); __asm("nop"); __asm("nop"); __asm("nop"); }
 
@@ -57,56 +26,14 @@ typedef unsigned char   BYTE  ; //  8
 typedef unsigned char   uc;
 
 
-//#define TRUE  1
-//#define FALSE 0
-
 #define VLOWORD(X) (*(WORD*)&(X))
 #define VHIWORD(X) (*(((WORD*)&(X))+1))
 
-#ifdef _WIN_
-
-    void stub_asm( char* s );
-    BYTE stub_inportb( WORD x );
-    WORD stub_inportw( WORD x );
-    void stub_outportb( WORD x, BYTE y );
-    void stub_outportw( WORD x, WORD y );
-
-    #define __asm(X) stub_asm(X)
-    #define inportb(X) (stub_inportb(X))
-    #define inportw(X) (stub_inportw(X))
-    #define outportb(X, Y) stub_outportb((X), (Y))
-    #define outportw(X, Y) stub_outportw((X), (Y))
-    #define __inline__
-
-    void WinTrace ( int port, char *str );
-
-#endif
-
-#ifdef _ATS_
-#define MAKEWORD(X, Y) ((WORD)(BYTE)(X)) + (((WORD)(BYTE)(Y)) << 8)
-#define LOBYTE(X) ((BYTE)(WORD)(X))
-#define HIBYTE(X) ((BYTE)(((WORD)(X)) >> 8))
-#endif
-
-#ifdef _WIN_
-#endif
 
 #define GETMIN(X,Y) ((X)<=(Y)?(X):(Y))
 
 #define MAKEDWORD(X, Y) ((DWORD)(WORD)(X)) + (((DWORD)(WORD)(Y)) << 16)
 
-#define PRINT HT.config.SendTerminalFormat
-#define SECOND sysComPort.SecondString
-
-#ifdef _ATS_
-    #define CONTROLPOINT(X)      sysSave.ControlPoint(__LINE__, (X))
-    #define CONTROLPOINTNAFIG(X) sysSave.ControlPoint(__LINE__, (X))
-#endif
-#ifdef _WIN_
-    #define CONTROLPOINT(X)      sysLoad.ControlPoint(__LINE__, (X))
-    #define CONTROLPOINTDEBUG(X) sysLoad.ControlPoint(((WORD)-1), (X))
-    #define CONTROLPOINTNAFIG(X) sysLoad.ControlPoint(((WORD)-2), (X))
-#endif
 
 //
 // Разные нужные типы

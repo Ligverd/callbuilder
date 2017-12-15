@@ -1,16 +1,7 @@
-#ifndef _CDRBUILDER_H_1C1CD0C0_20A0_4C3F_A39D_6DF29F450005_
-#define _CDRBUILDER_H_1C1CD0C0_20A0_4C3F_A39D_6DF29F450005_
-//added by pax
-#define BOOL bool
-#define FALSE false
-#define TRUE true
-//added by pax
-#include <include/monmessage.h>
+#ifndef _CDRBUILDER_H_
+#define _CDRBUILDER_H_
 
-#ifdef _DEBUG
-//	#define CONTROL_CALLS_COUNT
-#endif
-
+#include <monmessage.h>
 #include <list>
 #include <string>
 
@@ -42,126 +33,130 @@ namespace CDRBuilding
 #define FORMAT_CDR_TARIFF2000               19
 #define FORMAT_CDR_BGBILLING                20
 
-#define ALL_MODULES							255
-#define PERIOD_CHECK_COMOVER_CALLS			3600
-#define CLOCK_UNINITIALIZED					255
-#define CLOCK_INITIALIZED_EX				22
-#define MAX_RELATIVE_TIME_BREAK				12
-#define MOD_DELTA_UNINIT					2000000000
-#define MAX_TALK_DURATION					3600*10*2*10
+#define ALL_MODULES                         255
+#define PERIOD_CHECK_COMOVER_CALLS          3600
+#define CLOCK_UNINITIALIZED                 255
+#define CLOCK_INITIALIZED_EX                22
+#define MAX_RELATIVE_TIME_BREAK             12
+#define MOD_DELTA_UNINIT                    2000000000
+#define MAX_TALK_DURATION                   3600*10*2*10
 
-#define PREFIX_SUBSCRIBER					"A"
-#define PREFIX_TRUNK						"C"
+#define PREFIX_SUBSCRIBER                   "A"
+#define PREFIX_TRUNK                        "C"
 
 // 133 - оборвалось подключение к scomm, часть сообщений потеряна и
 //       рассчитать реальную длительность невозможно
 // 134 - переполнение буфера передачи к scomm, часть сообщений потеряна и
 //       рассчитать реальную длительность невозможно
 // 135 - обнаружен двойной идентификатор вызова.
-#define RELEASE_CAUSE_TCP_MODULE_DOWN		133
-#define RELEASE_CAUSE_COMOVERLOAD			134		
-#define RELEASE_CAUSE_DOUBLECALLID			135
+#define RELEASE_CAUSE_TCP_MODULE_DOWN       133
+#define RELEASE_CAUSE_COMOVERLOAD           134
+#define RELEASE_CAUSE_DOUBLECALLID          135
 
 //*****************************************************************************
 //обозначения для настройки формата вывода
-#define SAMPLE__CHANNEL_IN						"Ch_In"
-#define SAMPLE__CHANNEL_IN__COMMENT				"Входящий транк"
-#define SAMPLE__CGPN_IN							"CgPN_In"
-#define SAMPLE__CGPN_IN__COMMENT				"Входящий АОН"
-#define SAMPLE__CDPN_IN							"CdPN_In"
-#define SAMPLE__CDPN_IN__COMMENT				"Входящий набранный номер"
-#define SAMPLE__CHANNEL_OUT						"Ch_Out"
-#define SAMPLE__CHANNEL_OUT__COMMENT			"Исходящий транк"
-#define SAMPLE__CGPN_OUT						"CgPN_Out"
-#define SAMPLE__CGPN_OUT__COMMENT				"АОН исходящий"
-#define SAMPLE__CDPN_OUT						"CdPN_Out"
-#define SAMPLE__CDPN_OUT__COMMENT				"Набранный номер исходящий"
-#define SAMPLE__DATE_BEGTALK					"Date"
-#define SAMPLE__DATE_BEGTALK__COMMENT			"Дата начала разговора"
-#define SAMPLE__TIME_BEGTALK					"Time"
-#define SAMPLE__TIME_BEGTALK__COMMENT			"Время начала разговора"
-#define SAMPLE__DURATION						"Dur"
-#define SAMPLE__DURATION__COMMENT				"Продолжительность"
-#define SAMPLE__CV								"CV"
-#define SAMPLE__CV__COMMENT						"Причина отбоя"
+#define SAMPLE__CHANNEL_IN                      "Ch_In"
+#define SAMPLE__CHANNEL_IN__COMMENT             "Входящий транк"
+#define SAMPLE__CGPN_IN                         "CgPN_In"
+#define SAMPLE__CGPN_IN__COMMENT                "Входящий АОН"
+#define SAMPLE__CDPN_IN                         "CdPN_In"
+#define SAMPLE__CDPN_IN__COMMENT                "Входящий набранный номер"
+#define SAMPLE__CHANNEL_OUT                     "Ch_Out"
+#define SAMPLE__CHANNEL_OUT__COMMENT            "Исходящий транк"
+#define SAMPLE__CGPN_OUT                        "CgPN_Out"
+#define SAMPLE__CGPN_OUT__COMMENT               "АОН исходящий"
+#define SAMPLE__CDPN_OUT                        "CdPN_Out"
+#define SAMPLE__CDPN_OUT__COMMENT               "Набранный номер исходящий"
+#define SAMPLE__DATE_BEGTALK                    "Date"
+#define SAMPLE__DATE_BEGTALK__COMMENT           "Дата начала разговора"
+#define SAMPLE__TIME_BEGTALK                    "Time"
+#define SAMPLE__TIME_BEGTALK__COMMENT           "Время начала разговора"
+#define SAMPLE__DURATION                        "Dur"
+#define SAMPLE__DURATION__COMMENT               "Продолжительность"
+#define SAMPLE__CV                              "CV"
+#define SAMPLE__CV__COMMENT                     "Причина отбоя"
 
-#define SAMPLE__DEFAULT_PREFIX					"%"
-#define SAMPLE__DEFAULT_DIVIDER					" "
-#define SAMPLE__DEFAULT_NODATASTR				"-"
+#define SAMPLE__DEFAULT_PREFIX                  "%"
+#define SAMPLE__DEFAULT_DIVIDER                 " "
+#define SAMPLE__DEFAULT_NODATASTR               "-"
 
 //*****************************************************************************
 //структуры и связанные с ними DEFINE'ы
 //*****************************************************************************
 
 // структуры-настройки класса
-#define  MAX_NONUMBERSTRING_LENGTH      100
-#define  MAX_SAMPLESTRING_LENGTH		1000
+#define  MAX_NONUMBERSTRING_LENGTH      128
+#define  MAX_SAMPLESTRING_LENGTH        1024
 struct strCDRBuilderSettings
 {
-    bool bWriteUnansweredCalls;							//записывать неотвеченные вызовы
-    bool bWriteBinary2;									//ставить бинарную двойку
-    char sNoNumberString[MAX_NONUMBERSTRING_LENGTH+1];	//строка выводится, если номер не определился
-	bool bDecrementDuration;							//уменьшать продолжительность разговора на 1 сек.
-	BYTE btCDRStringFormat;								//формат CDR-строки
-	char sSampleString[MAX_SAMPLESTRING_LENGTH+1];		//строка-шаблон CDR строк
     std::string sA164;
     std::string sB164;
+    char sSampleString[MAX_SAMPLESTRING_LENGTH];        //строка-шаблон CDR строк
+    char sNoNumberString[MAX_NONUMBERSTRING_LENGTH];    //строка выводится, если номер не определился
     bool bDeleteFirstDigitFromAON;                      //удалять первую цифру из АОНа
     bool bBill2000;                                     //режим совместимости с Биллинг2000
+    bool bWriteUnansweredCalls;                         //записывать неотвеченные вызовы
+    bool bWriteBinary2;                                 //ставить бинарную двойку
+    bool bDecrementDuration;                            //уменьшать продолжительность разговора на 1 сек.
+    BYTE btCDRStringFormat;                             //формат CDR-строки
+    BYTE dummy[2];
 };
 
 //для внутренних номеров
 //префикс
-#define MAX_PREFIX_LENGTH               30
+#define MAX_PREFIX_LENGTH               32
 struct strPrefix
 {
-    BOOL bCutPrefix;									//отрезать префих у входящего АОНа, чтобы 
-														//определить является ли номер внутренним
-    char sPrefix[MAX_PREFIX_LENGTH+1];					//префикс
+    bool bCutPrefix;                                    //отрезать префих у входящего АОНа, чтобы
+    bool dummy[3];
+                                                        //определить является ли номер внутренним
+    char sPrefix[MAX_PREFIX_LENGTH];                    //префикс
 };
 //диапозон внутренних номеров
-#define MAX_INTERVAL_LENGTH             30
+#define MAX_INTERVAL_LENGTH             32
 struct strInterval
 {
-	char beg[MAX_INTERVAL_LENGTH+1];					//первый номер диапозона
-	char end[MAX_INTERVAL_LENGTH+1];					//последний номер диапозона
+    char beg[MAX_INTERVAL_LENGTH];                  //первый номер диапозона
+    char end[MAX_INTERVAL_LENGTH];                  //последний номер диапозона
 };
 typedef std::list<strInterval> TListInterval;
 //настройки журнала
 struct strJournalSettings
 {
-	BOOL bEnable;										//вести журнал или нет
-    int iMaxDuration;									//максимальная продол-ть разговора, после которой звонки попадают в журнал
+    int iMaxDuration;                               //максимальная продол-ть разговора, после которой звонки попадают в журнал
+    bool bEnable;                                   //вести журнал или нет
+    bool dummy[3];
 };
 
 
 //*****************************************************************************
 //структуры, где хранится вся информация о вызове
-#define MAX_LEN_NUMBER				30
-#define STRCALLINFO_RESERVED		50-8
-#define STRCALLINFOUNIT_RESERVED	50 - sizeof(TClock) - sizeof(DWORD) - sizeof(DWORD)  - sizeof(TClock) - sizeof(DWORD) 
-#define DVO_REDIR_BUFFER			100
+#define MAX_LEN_NUMBER              32
+#define STRCALLINFO_RESERVED        48
+#define STRCALLINFOUNIT_RESERVED    24
+#define DVO_REDIR_BUFFER            128
 
 
 struct strCDRTrunkUnit
 {
-	char sTrunk[MAX_LEN_NUMBER]; 
-	char sCdPN[MAX_LEN_NUMBER];  //набранный номер
-	char sCgPN[MAX_LEN_NUMBER];  //АОН
-} ;
+    char sTrunk[MAX_LEN_NUMBER];
+    char sCdPN[MAX_LEN_NUMBER];  //набранный номер
+    char sCgPN[MAX_LEN_NUMBER];  //АОН
+};
 
 
 struct strCDR
 {
-	strCDRTrunkUnit  STrunkInInfo;
-	strCDRTrunkUnit  STrunkOutInfo;
+    strCDRTrunkUnit  STrunkInInfo;
+    strCDRTrunkUnit  STrunkOutInfo;
 
-	TClock	timeSeizIn;
-	TClock	timeSeizOut;
-	DWORD	dwSeizDurationIn;
-	DWORD	dwSeizDurationOut;
-	DWORD	dwTalkDuration;
-	BYTE	btReason;
+    TClock  timeSeizIn;
+    TClock  timeSeizOut;
+    DWORD   dwSeizDurationIn;
+    DWORD   dwSeizDurationOut;
+    DWORD   dwTalkDuration;
+    BYTE    btReason;
+    BYTE    dummy[3];
 };
 
 
@@ -169,190 +164,194 @@ struct strTime
 {
     DWORD dwGlTime;
     TClock clock;
-} ;
+};
 
 struct strCallInfoUnit
 {
-	DWORD dwID;
-	BYTE btSig;
-	BYTE btMod;
-	BYTE btPcmSlot;						   
-	BYTE btKIPort;
-    //если это абонент, то инфа о нем
-	char acSubsNumber[MAX_LEN_NUMBER];//если SIG_EXT то указывается абонент, кто звонил или кому звонили
-	char acSubsAON[MAX_LEN_NUMBER];//если SIG_EXT то АОН абонента
-    //набранный номер и АОН
-	char acCdPN[MAX_LEN_NUMBER]; //набранный номер
-	char acCgPN[MAX_LEN_NUMBER];//АОН
-    
+    DWORD dwID;
+    DWORD dwSeizGlTime;       //точка начала занятия
+    DWORD dwComoverGlTime;    //время COMOVERLOAD'а
     DWORD dwBegTalkGlTime;      //точка начала разговора
     DWORD dwReleaseGlTime;      //точка конца разговора
+    DWORD dwAliveGlTime;      //глобальное время ALIVE'а
 
     //новые поля
-    TClock  clockSeiz;			//не используется
-    DWORD   dwSeizGlTime;       //точка начала занятия
-	DWORD	dwComoverGlTime;	//время COMOVERLOAD'а
+    TClock  clockSeiz;          //не используется
+    TClock  AliveClock;         //последний ALIVE
 
-    TClock  AliveClock;			//последний ALIVE
-    DWORD   dwAliveGlTime;      //глобальное время ALIVE'а
-	//резерв
+    //если это абонент, то инфа о нем
+    char acSubsNumber[MAX_LEN_NUMBER];//если SIG_EXT то указывается абонент, кто звонил или кому звонили
+    char acSubsAON[MAX_LEN_NUMBER];//если SIG_EXT то АОН абонента
+    //набранный номер и АОН
+    char acCdPN[MAX_LEN_NUMBER]; //набранный номер
+    char acCgPN[MAX_LEN_NUMBER];//АОН
+    //резерв
     BYTE abReserved[STRCALLINFOUNIT_RESERVED];
+
+    BYTE btSig;
+    BYTE btMod;
+    BYTE btPcmSlot;
+    BYTE btKIPort;
 };
 
 
 struct strCallInfo
 {
-	strCallInfoUnit InUnit;
-	strCallInfoUnit OutUnit;
-	bool bTalk;					  //был разговор или нет
-    int iDelta1;                   //InUnit.dwBegGlTime + iDelta = OutUnit.dwBegGlTime  
+    strCallInfoUnit InUnit;
+    strCallInfoUnit OutUnit;
 
     DWORD dwNextCombineCallID;
     DWORD dwPrevCombineCallID;
 
+    int iDelta1;                   //InUnit.dwBegGlTime + iDelta = OutUnit.dwBegGlTime 
+    int fRadiusAbsentAONInUnit;  //Если небыло АОН в ветке InUnit (для радиуса)
+    char RadiusAuthUserName[32];  //Имя пользователя для авторизации радиус
     char acRedirBuf[DVO_REDIR_BUFFER];
+
     //резерв
     BYTE abReserved[STRCALLINFO_RESERVED];
 
-	strCallInfo* pNextCall;          
-	strCallInfo* pPrevCall;
+    strCallInfo* pNextCall;
+    strCallInfo* pPrevCall;
+
+    bool bTalk; //был разговор или нет
+    bool dummy[3];
 } ;
 typedef std::list<strCallInfo*> TListPSCallInfo;
 
 //информация о модулях, необходимая при обработке сообщений
 #ifndef MAX_MOD
-#define MAX_MOD	64
+#define MAX_MOD 64
 #endif
 
-#define STRMODULEINFO_RESERVED			50
+#define STRMODULEINFO_RESERVED      52
 struct strModuleInfo
 {
-    BYTE    btLastRelTime;      // относительное время последнего сообщения модуля
-    DWORD   dwCounter;          // счетчик модуля, инкрементируется когда относительное время переходит на след. круг
     strTime LastAliveTime;      // последнее глобальное время ALIVE'а и его реальное время
-
+    DWORD   dwCounter;          // счетчик модуля, инкрементируется когда относительное время переходит на след. круг
     DWORD   dwLastCheckComoverCallsGlTime;      //глобальное время для проверки, есть ли зависшие звонки из-за COMOVERLOAD'а
     //резерв
     BYTE abReserved[STRMODULEINFO_RESERVED];
+
+    BYTE    btLastRelTime;      // относительное время последнего сообщения модуля
+    BYTE    dummy[3];
 };
 
 typedef std::list<char*> TPCharList;
 
 struct strLocalNumbersSettings
 {
-	strPrefix SPrefix;
-	TListInterval lstInterval;
+    strPrefix SPrefix;
+    TListInterval lstInterval;
 };
-//added by pax {
+
 #define LOWORD(X) ((WORD)(X))
 #define HIWORD(X) ((WORD)((X)>>16))
 #define LOBYTE(X) ((BYTE)(WORD)(X))
 #define HIBYTE(X) ((BYTE)(((WORD)(X)) >> 8))
-//}added by pax
+
 //*****************************************************************************
 //сам класс-обработчик
 class CCDRBuilder
 {
 public:
-#ifdef CONTROL_CALLS_COUNT
-	int m_iCallsCount;
-	int m_iMaxCallsCount;
-#endif
 
 private:
-	//поля
-	strCDRBuilderSettings m_SSettings;
-	strLocalNumbersSettings m_SLocalNumbersSettings;
+    //поля
+    strCDRBuilderSettings m_SSettings;
+    strLocalNumbersSettings m_SLocalNumbersSettings;
 
-    strModuleInfo m_ModuleInfo[MAX_MOD]; 
-	strCallInfo* m_pBegListCall;		  
-	strCallInfo* m_pEndListCall;	
+    strModuleInfo m_ModuleInfo[MAX_MOD];
 
-	DWORD m_dwLastError;
+    strCallInfo* m_pBegListCall;
+    strCallInfo* m_pEndListCall;
 
-	strJournalSettings m_SJournalSettings;
+    DWORD m_dwLastError;
 
-	TPCharList m_lstCDR;
-	TPCharList m_lstJour;
-	TPCharList m_lstErr;
+    strJournalSettings m_SJournalSettings;
+
+    TPCharList m_lstCDR;
+    TPCharList m_lstJour;
+    TPCharList m_lstErr;
 
     int m_ModDelta[MAX_MOD][MAX_MOD]; //таблица примерных дельт, по которым из глобального времени одного
-	                                  //модуля можно вычислить время другого
-
-
-	//методы
-
+                                      //модуля можно вычислить время другого
+    //методы
 public:
-	CCDRBuilder();
-	~CCDRBuilder(void);
-	
-	//настройки 
-	void SetCommonSettings(const strCDRBuilderSettings* pSSettings);
-	void SetLocalNumbersSettings(const TListInterval& lstLocalNumbers,  const strPrefix* pSPrefix = NULL);
-	void SetJournalSettings(const strJournalSettings* pSett);
-	//закрузка и выгрузка звонков, оставшихся после обработки файла
-	void PutResiduaryCalls(const strModuleInfo SModuleInfoArray[MAX_MOD], const TListPSCallInfo& lstCallInfo);
-	void GetResiduaryCalls(strModuleInfo SModuleInfoArray[MAX_MOD], TListPSCallInfo& lstCallInfo) const;
+    CCDRBuilder();
+    ~CCDRBuilder(void);
 
-	DWORD GetLastError(void);
-	//обработка сообщения 
-	BOOL ProcessMessage(CMonMessageEx& mes);
-	//получение результата
-	void GetCDRList(TPCharList& lst);
-	void GetJournalList(TPCharList& lst);
-	void GetErrorList(TPCharList& lst);
-	//очистка звонков
-	void CleanCalls(void);
-	void OnComoverload(BYTE btMod);
-	static BOOL TransformMessageToString(CMonMessageEx& mes, char* pBuffer, int iBufferSize);
-	static const char* SigTypeToStr(BYTE sig);
+    //настройки 
+    void SetCommonSettings(const strCDRBuilderSettings* pSSettings);
+    void SetLocalNumbersSettings(const TListInterval& lstLocalNumbers,  const strPrefix* pSPrefix = NULL);
+    void SetJournalSettings(const strJournalSettings* pSett);
+    //закрузка и выгрузка звонков, оставшихся после обработки файла
+    void PutResiduaryCalls(const strModuleInfo SModuleInfoArray[MAX_MOD], const TListPSCallInfo& lstCallInfo);
+    void GetResiduaryCalls(strModuleInfo SModuleInfoArray[MAX_MOD], TListPSCallInfo& lstCallInfo) const;
+
+    DWORD GetLastError(void);
+    //обработка сообщения 
+    bool ProcessMessage(CMonMessageEx& mes);
+    //получение результата
+    void GetCDRList(TPCharList& lst);
+    void GetJournalList(TPCharList& lst);
+    void GetErrorList(TPCharList& lst);
+    //очистка звонков
+    void CleanCalls(void);
+    void OnComoverload(BYTE btMod);
+    static bool TransformMessageToString(CMonMessageEx& mes, char* pBuffer, int iBufferSize);
+    static const char* SigTypeToStr(BYTE sig);
 
 private:
     std::string GetFormat164(const char* sNumber, std::string s164Prefix);
-	std::string GetStringParameterBySample(const char* sSample, const CDRBuilding::strCDR& CDR);
-	BOOL CheckCallsGlTime(strCallInfoUnit& MainCallUnit, strCallInfoUnit& SubsCallUnit, bool bLastCheck);
-	void JournalAnalysisMes(CMonMessageEx& mes);
-	void ResetModuleInfo(int iModNumber);
-	void OnAlive(CMonMessageEx& mes);
-	void CheckModuleInfo(BYTE btMod, CMonMessageEx& mes);
-	DWORD GetGlobalTime(BYTE btMod, BYTE btRelTime);
-	void ReleaseComoverCalls(void);
-	BYTE ExtractModNumber(DWORD dwID);
-	void OnSeizure(CMonMessageEx& mes);
-	void AddErrorString(const char* sStr);
-	strCallInfo* AddNewCall(void);
-	BYTE GetDaysInMonth(BYTE btMonth, BYTE btYear);
-	void OnCall(CMonMessageEx& mes);
-	void OnAccept(CMonMessageEx& mes);
-	void OnNumber(CMonMessageEx& mes);
-	void OnAnswer(CMonMessageEx& mes);
-	void OnSpiderModuleDown(CMonMessageEx& mes);
+    std::string GetFormatBgBilling164(const char* sNumber, std::string s164Prefix);
+    std::string GetStringParameterBySample(const char* sSample, const CDRBuilding::strCDR& CDR);
+    bool CheckCallsGlTime(strCallInfoUnit& MainCallUnit, strCallInfoUnit& SubsCallUnit, bool bLastCheck);
+    void JournalAnalysisMes(CMonMessageEx& mes);
+    void ResetModuleInfo(int iModNumber);
+    void OnAlive(CMonMessageEx& mes);
+    void CheckModuleInfo(BYTE btMod, CMonMessageEx& mes);
+    DWORD GetGlobalTime(BYTE btMod, BYTE btRelTime);
+    void ReleaseComoverCalls(void);
+    BYTE ExtractModNumber(DWORD dwID);
+    void OnSeizure(CMonMessageEx& mes);
+    void AddErrorString(const char* sStr);
+    strCallInfo* AddNewCall(void);
+    BYTE GetDaysInMonth(BYTE btMonth, BYTE btYear);
+    void OnCall(CMonMessageEx& mes);
+    void OnAccept(CMonMessageEx& mes);
+    void OnNumber(CMonMessageEx& mes);
+    void OnAnswer(CMonMessageEx& mes);
+    void OnSpiderModuleDown(CMonMessageEx& mes);
     void OnSpiderGateLost(CMonMessageEx& mes);
-	void ReleaseCalls(BYTE btMod);
-	void ReleaseCall(strCallInfo* pCall, BYTE btReason);
-	void DeleteCallFromList(strCallInfo* pDelCall);
-	TClock AddToClock(const TClock& clock, int iDelta);
-	void OnSpiderTcpDown(void);
-	void OnCombine(CMonMessageEx& mes);
-	void MakeCDR(const strCDR& CDR);
+    void ReleaseCalls(BYTE btMod);
+    void ReleaseCall(strCallInfo* pCall, BYTE btReason);
+    void DeleteCallFromList(strCallInfo* pDelCall);
+    TClock AddToClock(const TClock& clock, int iDelta);
+    void OnSpiderTcpDown(void);
+    void OnCombine(CMonMessageEx& mes);
+    void MakeCDR(strCDR& CDR);
     void DeleteSpaces(char* pStr);
-	void AddJournalString(const char* sStr);
-	void AddCDRString(const char* sStr);
-	void OnRelease(CMonMessageEx& mes);
-	void OnDvoRedirect(CMonMessageEx& mes);
+    void AddJournalString(const char* sStr);
+    void AddCDRString(const char* sStr);
+    void OnRelease(CMonMessageEx& mes);
+    void OnDvoRedirect(CMonMessageEx& mes);
+    bool testNumber(const char *stringtotest);
+    void FixCDRNumbers(CDRBuilding::strCDR& CDR);
 public:
-	strCallInfo* GetPBegListCall(void);
-	bool IsAcceptedTime(const TClock* pClock);
-	BOOL TransformGlTimeToClock(BYTE btMod, DWORD dwGlTime, TClock& cl);
-	strCallInfo* FindCall(DWORD dwID);
-	void FreeListMem(TPCharList& lst);
+    strCallInfo* GetPBegListCall(void);
+    bool IsAcceptedTime(const TClock* pClock);
+    bool TransformGlTimeToClock(BYTE btMod, DWORD dwGlTime, TClock& cl);
+    strCallInfo* FindCall(DWORD dwID);
+    void FreeListMem(TPCharList& lst);
 
 private:
-	void WriteAliveTime(strCallInfoUnit* pCallUnit);
-	bool IsInnerNumber(char* pNum, bool bIsAon);
-	void CopyList(TPCharList& lstDest, const TPCharList& lstSrc);
+    void WriteAliveTime(strCallInfoUnit* pCallUnit);
+    bool IsInnerNumber(char* pNum, bool bIsAon);
+    void CopyList(TPCharList& lstDest, const TPCharList& lstSrc);
 public:
     bool IsBilling2000Mode(void);
 };
+
 }
 #endif

@@ -1,7 +1,9 @@
 #ifndef  __UNIPAR_H__
 #define  __UNIPAR_H__
 
-#include <include/type.h>
+#include <type.h>
+
+#pragma pack (push, 1)
 
 namespace UniN {
 struct Number;
@@ -271,26 +273,26 @@ class CUniPar
 {
     public:
 
-        // Созидание
-        static void clear ( void );
-        static void clear ( TSignalling sig );
+        // Создание
+        void clear ( void );
+        void clear ( TSignalling sig );
 
-        static void setSignalling ( TSignalling sig );
+        void setSignalling ( TSignalling sig );
 
-        static void  addByte ( TUniPar uniPar, BYTE data );
-        static void  addWord ( TUniPar uniPar, WORD data );
-        static void  addDWord ( TUniPar uniPar, DWORD data );
-        static void* addBuffer(TUniPar uniPar, const void* buf, BYTE len);
-        static void  addString ( TUniPar uniPar, const char *str );
-        static void  addFlag ( TUniPar uniPar );
-        static void  addNumber(TUniPar uniPar, const UniN::Number& num);
-        static bool  addUni ( TUniPar uniPar, CUniPar* up, TUniPar uniParNew = 0);
+        void  addByte ( TUniPar uniPar, BYTE data );
+        void  addWord ( TUniPar uniPar, WORD data );
+        void  addDWord ( TUniPar uniPar, DWORD data );
+        void* addBuffer(TUniPar uniPar, const void* buf, BYTE len);
+        void  addString ( TUniPar uniPar, const char *str );
+        void  addFlag ( TUniPar uniPar );
+        void  addNumber(TUniPar uniPar, const UniN::Number& num);
+        bool  addUni ( TUniPar uniPar, CUniPar* up, TUniPar uniParNew = 0);
 
-        static void remove ( TUniPar uniPar ); // удаление параметра
+        void remove ( TUniPar uniPar ); // удаление параметра
 
-        static CUniPar* create ( void );
+        CUniPar* create ( void );
 
-        static CUniPar* create ( const BYTE* data );
+        CUniPar* create ( const BYTE* data );
 
         // Чтение
         TSignalling getSignalling ( void ) const;
@@ -311,10 +313,6 @@ class CUniPar
 
         short getLen() const;
 
-        // Локализация (копирование в стат буфер)
-        void localize() const;
-        void localize(const BYTE* paramPtr) const;      // Мувим один параметр в стат буфер
-
         // Шаримся по параметрам
         const void* getFirstPtr() const;
         const void* getNextPtr(const void* paramPtr) const;
@@ -332,10 +330,6 @@ class CUniPar
         short Len;
         TSignalling Signalling;
         BYTE Buf[MAX_SIZE_PARAMETER];
-
-        static short stLen;
-        static TSignalling stSignalling;
-        static char stBuf[MAX_SIZE_PARAMETER];
 };
 
 //
@@ -399,5 +393,7 @@ const   TCauseValue     ReleaseCause_Message_not_compatible                     
 const   TCauseValue     ReleaseCause_Recovery_on_timer_expiry                     = 102;
 const   TCauseValue     ReleaseCause_Protocol_error_unspecified                   = 111;
 const   TCauseValue     ReleaseCause_Interworking_unspecified                     = 127;
+
+#pragma pack (pop)
 
 #endif

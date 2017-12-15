@@ -1,11 +1,7 @@
 #ifndef _LIB_H_
 #define _LIB_H_
 
-#ifdef WIN32
-#pragma warning(disable:4786)
-#endif
-
-#include <include/type.h>
+#include <type.h>
 
 int printdword( char *str, DWORD n, short basic );
 int printformat( char *str, const char *format, BYTE *ptr );
@@ -18,11 +14,11 @@ int IntToStrHex( char *s, DWORD num );
 void SkipSpaces( char *s, int *pos );
 void nextDigit(char *s, int &pos);
 
-#ifndef _ATS_
+
 #include  <string>
 std::string intToStr(int num);
 std::string getBufferAsString(void* buffer, int len);
-#endif
+
 
 // На время везде выравнивание 1 байт
 #pragma pack (push, 1)

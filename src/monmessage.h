@@ -1,10 +1,8 @@
 #ifndef  __MONMESSAGE_H__
 #define  __MONMESSAGE_H__
 
-//#pragma pack(1)
-
-#include  <include/type.h>
-#include  <include/lib.h>
+#include  <type.h>
+#include  <lib.h>
 
 
 // константы для состояния потоков, при изменнии очердности послать сообщение на e-mail: sapr@m-200.com
@@ -108,7 +106,7 @@ public:
     // запись
     void addParameterByte(BYTE b)           { data_[size_++] = b; }
     void addParameterDWord(DWORD d) { 
-    #ifdef __ARM__
+    #ifdef ARMLINUX
         *(data_+size_++) = (BYTE)d;
         *(data_+size_++) = (BYTE)(d >> 8);
         *(data_+size_++) = (BYTE)(d >> 16);
@@ -124,7 +122,7 @@ public:
     // чтение
     BYTE    getParameterByte(int& readPos) const  { return data_[readPos++]; }
     DWORD   getParameterDWord(int& readPos) const {
-        #ifdef __ARM__
+        #ifdef ARMLINUX
             DWORD d = *(data_+readPos++);
                 d |= *(data_+readPos++) << 8;
                 d |= *(data_+readPos++) << 16;
@@ -141,7 +139,5 @@ public:
 
     bool monMessageToText(char* pTextBuffer, int iTextBufferSize) const;
 };
-
-//#pragma pack()
 
 #endif

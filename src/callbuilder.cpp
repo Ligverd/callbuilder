@@ -20,12 +20,21 @@
  ***************************************************************************/
 
 #include "callbuilder.h"
+#include "CDRRadius.h"
+#include "client.h"
+#include "netmes.h"
+#include <stdarg.h>
 
 using namespace std;
 
 //global variables
+struct sigaction sact;
+volatile bool fMainRun = true;
+
 CParser Parser;
 CDRBuilding::CCDRBuilder builder;
+CSMPClient *SMP = NULL;
+pthread_mutex_t SMPfMutex = PTHREAD_MUTEX_INITIALIZER;
 
 int Spider_fd = 0;
 int fd_tfs = 0;
@@ -36,51 +45,80 @@ char sMessage[128];
 
 void get_time_str(char* tm_str, tm T)
 {
-  sprintf(tm_str,"[%02d-%02d-%04d %02d:%02d:%02d]",T.tm_mday,T.tm_mon+1,(T.tm_year+1900),T.tm_hour,T.tm_min,T.tm_sec);
+  sprintf(tm_str,"[%02d-%02d-%04d %02d:%02d:%02d]", T.tm_mday, T.tm_mon+1, (T.tm_year+1900), T.tm_hour, T.tm_min,T.tm_sec);
 }
 
 bool StrToLog(const char* str)
 {
     int fd;
     bool fret = true;
+
+    if(!Parser.sLogFile)
+        return false;
+
     if ( (fd = open(Parser.sLogFile, O_RDWR | O_CREAT | O_APPEND , 0666 )) < 0)
     {
-        printf("Can't write to log file:%s\n",Parser.sLogFile);
+        printf("Can't write to log file:%s\n", Parser.sLogFile);
         return false;
     }
-    if(write(fd, str, strlen(str))<0)
-        fret = false;
+
+    if(write(fd, str, strlen(str)) < 0)
+    {
+        close(fd);
+        return false;
+    }
+
+    off_t flen = lseek(fd, 0, SEEK_CUR);
+
+    if(flen >= Parser.nLogFileSize * 1024 * 1024)
+    {
+        std::string name1(Parser.sLogFile);
+        std::string name2(Parser.sLogFile);
+        name1 += ".1";
+        name2 += ".2";
+        remove(name2.c_str());
+        rename(name1.c_str(), name2.c_str());
+        rename(Parser.sLogFile, name1.c_str());
+    }
+
     close(fd);
-    return fret;
+    return true;
 }
 
 void Loger(const char* str)
 {
     char time_str[22];
-    char logstr[128];
+    char logstr[1024];
     time_t itime;
     tm T;
     time (&itime);
-    localtime_r(&itime,&T);
-    printf("%s",str);
-    get_time_str(time_str,T);
-    sprintf(logstr,"%s %s",time_str, str);
+    localtime_r(&itime, &T);
+    printf("%s", str);
+    get_time_str(time_str, T);
+    sprintf(logstr, "%s %s", time_str, str);
     StrToLog(logstr);
 }
 
+void Logerf(const char *format, ...)
+{
+    char buff[512];
+    va_list ap;
+    va_start(ap, format);
+    vsnprintf(buff, sizeof(buff), format, ap);
+    va_end(ap);
+    Loger(buff);
+}
 
 
 bool make_nonblock(int sock)
 {
     int sock_opt;
-    if((sock_opt = fcntl(sock, F_GETFL, O_NONBLOCK)) <0) 
-    {
+    if((sock_opt = fcntl(sock, F_GETFL, O_NONBLOCK)) < 0)
         return false;
-    }
-    if((sock_opt = fcntl(sock, F_SETFL, sock_opt | O_NONBLOCK)) <0)
-    {
+
+    if((sock_opt = fcntl(sock, F_SETFL, sock_opt | O_NONBLOCK)) < 0)
         return false;
-    }
+
     return true;
 }
 
@@ -202,32 +240,32 @@ int Create_server_point(in_addr_t port, int i)
 
     if(!make_nonblock(fd)) 
     {
-        close(fd); 
+        close(fd);
         Loger("Can't make callbuilder server socket nonblock!\n");
         return -1;
     }
 
     sock_opt = 1;
-    if(setsockopt(fd,SOL_SOCKET,SO_REUSEADDR,&sock_opt,sizeof(sock_opt)) <0)
+    if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &sock_opt, sizeof(sock_opt)) < 0)
     {
         Loger("Can't set callbuilder server socket option SO_REUSEADDR!\n");
     }
 
     sock_opt = 1;
-    if(setsockopt(fd,SOL_SOCKET,SO_KEEPALIVE,&sock_opt,sizeof(sock_opt)) <0)
+    if(setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &sock_opt, sizeof(sock_opt)) < 0)
     {
         Loger("Can't set callbuilder server socket option SO_KEEPALIVE!\n");
     }
 
 #ifdef TCP_OPT
     sock_opt = 60;
-    if(setsockopt(fd,IPPROTO_TCP,TCP_KEEPIDLE,&sock_opt,sizeof(sock_opt)) <0)
+    if(setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &sock_opt, sizeof(sock_opt)) < 0)
     {
         Loger("Can't set callbuilder server socket option TCP_KEEPIDLE!\n");
     }
 
     sock_opt = 60;
-    if(setsockopt(fd,IPPROTO_TCP,TCP_KEEPINTVL,&sock_opt,sizeof(sock_opt)) <0)
+    if(setsockopt(fd, IPPROTO_TCP,TCP_KEEPINTVL, &sock_opt, sizeof(sock_opt)) < 0)
     {
         Loger("Can't set callbuilder server socket option TCP_KEEPINTVL!\n");
     }
@@ -240,18 +278,18 @@ int Create_server_point(in_addr_t port, int i)
     if ( bind(fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) <0)
     {
         close(fd);
-        sprintf(log,"Error callbuilder server with port:%d\n",port);
+        sprintf(log, "Error callbuilder server with port:%d\n", port);
         Loger(log);
         return -1;
     }
 
-    if (listen(fd,1) < 0)
+    if (listen(fd, 1) < 0)
     {
         close(fd);
         printf("Listen callbuilder server socket error!\n");
         return -1;
     }
-    sprintf(log,"callbuilder %s server listening port:%d\n",GetConnectStr(i),ntohs(server_addr.sin_port));
+    sprintf(log, "callbuilder %s server listening port:%d\n", GetConnectStr(i), ntohs(server_addr.sin_port));
     Loger(log);
     return fd;
 }
@@ -331,11 +369,11 @@ char ConvertTable(const char c)
 void RemoveFiles()
 {
     char path[200];
-    sprintf(path,"%s/%s",Parser.sOutDir,Parser.sLogFileName);
+    sprintf(path, "%s/%s", Parser.sOutDir,Parser.sLogFileName);
     remove(path);
-    sprintf(path,"%s/%s",Parser.sOutDir,Parser.sErrFileName);
+    sprintf(path, "%s/%s", Parser.sOutDir,Parser.sErrFileName);
     remove(path);
-    sprintf(path,"%s/%s",Parser.sOutDir,Parser.sJrnFileName);
+    sprintf(path, "%s/%s", Parser.sOutDir,Parser.sJrnFileName);
     remove(path);
 }
 
@@ -346,14 +384,11 @@ bool WriteStrToFile(const char* path, const char *str)
     bool bRes = true;
 
     if ( (fd = open(path, O_RDWR | O_CREAT | O_APPEND , 0666 )) < 0)
-    {
         return false;
-    }
 
-    if(write(fd, str, strlen(str))<0)
-    {
+    if(write(fd, str, strlen(str)) < 0)
         bRes = false;
-    }
+
     close(fd);
     return bRes;
 }
@@ -361,16 +396,15 @@ bool WriteStrToFile(const char* path, const char *str)
 bool WriteStringsToFile(const char* sDir ,const char* sFileName, CDRBuilding::TPCharList& lstStr)
 {
     if(lstStr.empty())
-    {
         return true;
-    }
+
     bool bRes = true;
     char path[200];
-    sprintf(path,"%s/%s",sDir,sFileName);
+    sprintf(path,"%s/%s", sDir, sFileName);
     int fd;
     if ( (fd = open(path, O_RDWR | O_CREAT | O_APPEND , 0666 )) < 0)
     {
-        printf("Error: can't write to file:%s!\n",sFileName);
+        printf("Error: can't write to file:%s!\n", sFileName);
         return false;
     }
 
@@ -389,7 +423,7 @@ bool WriteStringsToFile(const char* sDir ,const char* sFileName, CDRBuilding::TP
         {
             strcpy(sTmp, *it);
             strcat(sTmp,"\r\n"); //htob faili ne otlichalis ot windovih
-            if( write(fd,sTmp,strlen(sTmp))<0)
+            if( write(fd,sTmp, strlen(sTmp)) < 0)
             {
                 bRes = false;
                 break;
@@ -404,16 +438,11 @@ bool WriteStringsToFile(const char* sDir ,const char* sFileName, CDRBuilding::TP
 void WriteStringsOnLine(const char* sDir ,const char* sFileName, CDRBuilding::TPCharList& lstStr, int i)
 {
     if(lstStr.empty())
-    {
         return;
-    }
 
-    char log[234];
+    char log[300];
 
     char path[200];
-
-    //char path[strlen(sDir)+strlen("/")+strlen(sFileName)+1];
-
     sprintf(path,"%s/%s",sDir,sFileName);
 
     char cnv_path[204]; // dva puti iz za for
@@ -446,9 +475,9 @@ void WriteStringsOnLine(const char* sDir ,const char* sFileName, CDRBuilding::TP
                     FD_SET(connect_point[i + MAX_CONNECT_POINT/2], &wset);
                     if ((retval = select(connect_point[i + MAX_CONNECT_POINT/2] + 1, NULL, &wset, NULL, &tv)) > 0) 
                     {
-                        int ERROR=-1;
+                        int ERROR = -1;
                         socklen_t opt_size = sizeof(ERROR);
-                        getsockopt(connect_point[i + MAX_CONNECT_POINT/2],SOL_SOCKET,SO_ERROR,&ERROR,&opt_size);
+                        getsockopt(connect_point[i + MAX_CONNECT_POINT/2], SOL_SOCKET, SO_ERROR, &ERROR, &opt_size);
                         if(ERROR == 0)
                         {
                             //esli v peredi stroki ponadobitsia dlinna
@@ -497,7 +526,7 @@ void WriteStringsOnLine(const char* sDir ,const char* sFileName, CDRBuilding::TP
                     }
                 }
             }
-            printf("%s",sTmp);
+            printf("%s", sTmp);
         }
     }
     return;
@@ -505,7 +534,7 @@ void WriteStringsOnLine(const char* sDir ,const char* sFileName, CDRBuilding::TP
 
 int SaveResiduaryCalls(const char* sDir, const char* sFileName)
 {
-    int fd,n;
+    int fd, n;
     char path[200];
     sprintf(path,"%s/%s", sDir, sFileName);
     if ( (fd = open(path, O_WRONLY | O_CREAT | O_TRUNC , 0666)) < 0)
@@ -543,7 +572,7 @@ int PutResiduaryCalls(const char* sDir, const char* sFileName)
     char path[200];
     sprintf(path,"%s/%s", sDir, sFileName);
     if ( (fd = open(path, O_RDONLY)) < 0)
-        RETURNERR("Warning: No input residuary file!\n");
+        return 0;
 
     CDRBuilding::strModuleInfo ModInfo[MAX_MOD];
     CDRBuilding::TListPSCallInfo lstCalls;
@@ -573,23 +602,25 @@ int PutResiduaryCalls(const char* sDir, const char* sFileName)
     }
     else 
         RETURNERR("Error: error loading residuary file!\n");
+
     close(fd);
-    return 1;
+    return 0;
 }
 
 int Converter(const char* sDir ,const char* sFileName)
 {
     int fd_in,fd_out;
 
-    char path[204],c;
-    sprintf(path,"%s/%s",sDir,sFileName);
+    char path[204], c;
+    sprintf(path, "%s/%s", sDir, sFileName);
+
     if ( (fd_in = open(path, O_RDONLY)) < 0)
     {
         printf("Converter: can't open file:%s\n",path);
         return -1;
     }
 
-    strcat(path,".cnv");
+    strcat(path, ".cnv");
     if ( (fd_out = open(path, O_WRONLY | O_CREAT | O_TRUNC , 0666)) < 0)
     {
         printf("Converter: can't create file:%s\n",path);
@@ -616,7 +647,7 @@ int Converter(const char* sDir ,const char* sFileName)
 
 void ComleteActions()
 {
-        printf("%s",sMessage);
+        printf("%s", sMessage);
         if (Parser.fConvert)
         {
             Converter(Parser.sOutDir, Parser.sErrFileName);
@@ -624,7 +655,7 @@ void ComleteActions()
         }
         //сохраняем оставшиеся звонки
         Parser.RefreshResidFileName();
-        SaveResiduaryCalls(Parser.sOutDir, Parser.sOutRm3FileName);
+        SaveResiduaryCalls(Parser.sInDir, Parser.sOutRm3FileName);
         builder.CleanCalls();
 }
 
@@ -632,13 +663,12 @@ void ComleteOnLineActions()
 {
     Loger(sMessage);
     builder.CleanCalls();
-    Loger("Terminating process...");
 }
 
 int RestoreMessage(const DWORD dwLen, CDRBuilding::TPCharList& lstStr)
 {
     iReadBytes -= 4;
-    lseek(fd_tfs,-4, SEEK_CUR);
+    lseek(fd_tfs, -4, SEEK_CUR);
     builder.OnComoverload(ALL_MODULES);
 
     char *sTmpJrnStr = new char[128];
@@ -696,73 +726,121 @@ int RestoreMessage(const DWORD dwLen, CDRBuilding::TPCharList& lstStr)
 
 void Visualisation(const char* sCurrFileName)
 {
-    printf("\n<-------------------------------Callbuilder v0.5.4---------------------------->\n");
+    Logerf("\n<-------------------------------Callbuilder v%s---------------------------->\n", VERSION);
 
-    if (Parser.sSpiderIp) 
+    if (Parser.sSpiderIp)
     {
-        printf("Spider ip address:%s\n", Parser.sSpiderIp);
-        printf("Spider port:%d\n",Parser.SpiderPort);
-        if(Parser.fDaemon) printf("Daemon mode!\n");
+        Logerf("Spider ip address:%s\n", Parser.sSpiderIp);
+        Logerf("Spider port:%d\n",Parser.SpiderPort);
+        if(Parser.fDaemon) Loger("Daemon mode!\n");
     }
     else
         Parser.rotation = Parser.tfsFileType;
 
-    if(Parser.sInDir) printf("Input directory:%s\n",Parser.sInDir);
-    if(Parser.sOutDir) printf("Output directory:%s\n",Parser.sOutDir);
-    printf("Tfs file name:%s\n",sCurrFileName);
+    if(Parser.sInDir) Logerf("Input directory:%s\n", Parser.sInDir);
+    if(Parser.sOutDir) Logerf("Output directory:%s\n", Parser.sOutDir);
+    Logerf("Tfs file name:%s\n", sCurrFileName);
     switch(Parser.rotation)
     {
         case ROTATION_REALTIME:
-            printf("Rotation:realtime\n");
+            Loger("Rotation:realtime\n");
         break;
         case ROTATION_DAY:
-            printf("Rotation:day\n");
+            Loger("Rotation:day\n");
         break;
         case ROTATION_DECADE:
-            printf("Rotation:decade\n");
+            Loger("Rotation:decade\n");
         break;
         case ROTATION_MONTH:
-            printf("Rotation:month\n");
+            Loger("Rotation:month\n");
         break;
         case ROTATION_ONLINE:
-            printf("Rotation:online\n");
+            Loger("Rotation:online\n");
         break;
         case ROTATION_FROM_ATS:
-            printf("Rotation:from ats\n");
+            Loger("Rotation:from ats\n");
+        break;
+        case ROTATION_FROM_SS:
+            Loger("Rotation:from ss\n");
         break;
         default:
         {
             WARNING;
-            printf("Warning:Rotation:unknown!\n");
+            Loger("Warning:Rotation:unknown!\n");
         }
     }
-    if(Parser.sInRm3FileName) printf("Input residuary file:%s\n",Parser.sInRm3FileName);
-    if(Parser.sOutRm3FileName) printf("Output residuary file:%s\n",Parser.sOutRm3FileName);
-    if(Parser.sTfsFileNameBase) printf("File name base:%s\n",Parser.sTfsFileNameBase);
-    if(Parser.sLogFileName) printf("Log file name:%s\n",Parser.sLogFileName);
-    if(Parser.sErrFileName) printf("Err file name:%s\n",Parser.sErrFileName);
-    if(Parser.sJrnFileName) printf("Jrn file name:%s\n",Parser.sJrnFileName);
-    if(!Parser.SSettings.bWriteUnansweredCalls) printf("Unanswered calls are not writing!\n");
-    if(!Parser.Sett.bEnable) printf("Journal is off!\n");
-    printf("Journal maximum busy duration %d\n",Parser.Sett.iMaxDuration);
-    if(!Parser.SSettings.bWriteBinary2) printf("No binary 2 at logfile strings!\n");
-    if(!Parser.fConvert) printf("No converted files!\n");
-    if(Parser.fRem_rm3) printf("Removing rm3 files after success!\n");
-    printf("CDR string format:%d\n",Parser.SSettings.btCDRStringFormat);
+    if(Parser.sInRm3FileName) Logerf("Input residuary file:%s\n", Parser.sInRm3FileName);
+    if(Parser.sOutRm3FileName) Logerf("Output residuary file:%s\n", Parser.sOutRm3FileName);
+    if(Parser.sTfsFileNameBase) Logerf("File name base:%s\n", Parser.sTfsFileNameBase);
+    if(Parser.sLogFileName) Logerf("Log file name:%s\n", Parser.sLogFileName);
+    if(Parser.sErrFileName) Logerf("Err file name:%s\n", Parser.sErrFileName);
+    if(Parser.sJrnFileName) Logerf("Jrn file name:%s\n", Parser.sJrnFileName);
+    if(!Parser.SSettings.bWriteUnansweredCalls) Loger("Unanswered calls are not writing!\n");
+    if(!Parser.Sett.bEnable) Loger("Journal is off!\n");
+    Logerf("Journal maximum busy duration %d\n", Parser.Sett.iMaxDuration);
+    if(!Parser.SSettings.bWriteBinary2) Loger("No binary 2 at logfile strings!\n");
+    if(!Parser.fConvert) Loger("No converted files!\n");
+    if(Parser.fRem_rm3) Loger("Removing rm3 files after success!\n");
+    Logerf("CDR string format:%d\n",Parser.SSettings.btCDRStringFormat);
     if(strcmp(Parser.SSettings.sNoNumberString,"-"))
-        printf("No number string separator:\"%s\"\n",Parser.SSettings.sNoNumberString);
+        Logerf("No number string separator:\"%s\"\n",Parser.SSettings.sNoNumberString);
     if(Parser.SPrefix.bCutPrefix)
-        printf("Cut prefix:%s\n",Parser.SPrefix.sPrefix);
+        Logerf("Cut prefix:%s\n",Parser.SPrefix.sPrefix);
     if(!Parser.lstLocalNumbers.empty())
     {
-        printf("Inner numbers:\n");
+        Loger("Inner numbers:\n");
         CDRBuilding::TListInterval::const_iterator it;
         for (it = Parser.lstLocalNumbers.begin(); it != Parser.lstLocalNumbers.end(); it++)
         {
-            printf("%s-%s\n", it->beg, it->end);
+            Logerf("%s-%s\n", it->beg, it->end);
         }
     }
-    printf("<--------------------------------------------------------------------------->\n\n");
+    if(Parser.sRadiusAccIp[0])
+    {
+        Logerf("Radius accounting server ip:%s\n", Parser.sRadiusAccIp);
+        Logerf("Radius accounting server port:%d\n", Parser.nRadiusAccPort);
+        switch(Parser.nRadiusAccBilling)
+        {
+            case BILLING_LANBILLING:
+                Loger("Radius accounting system:LANBILLING\n");
+            break;
+            case BILLING_UTM5:
+                Loger("Radius accounting system:UTM5\n");
+            break;
+            default:
+                Loger("Radius accounting system:UNKNOWN\n");
+        }
+        if(Parser.sRadiusAccSecret[0]) Logerf("Radius accounting server secret:%s\n", Parser.sRadiusAccSecret);
+
+        if(Parser.sRadiusConfigFile[0]) Logerf("Radius conig file:%s\n", Parser.sRadiusConfigFile);
+        if(Parser.sRadiusDictionaryFile[0]) Logerf("Radius dictionary file:%s\n", Parser.sRadiusDictionaryFile);
+        if(Parser.sRadiusSeqFile[0]) Logerf("Radius sequence file:%s\n", Parser.sRadiusSeqFile);
+        Logerf("Radius send retryes:%u\n", Parser.nRadiusSndRetry);
+        Logerf("Radius send timeout:%u\n", Parser.nRadiusSndTimeout);
+    }
+    if(Parser.sRadiusAuthIp[0])
+    {
+        Logerf("Radius authorization server ip:%s\n", Parser.sRadiusAuthIp);
+        Logerf("Radius authorization server port:%d\n", Parser.nRadiusAuthPort);
+        switch(Parser.nRadiusAuthBilling)
+        {
+            case BILLING_LANBILLING:
+                Loger("Radius authorization system:LANBILLING\n");
+            break;
+            case BILLING_UTM5:
+                Loger("Radius authorization system:UTM5\n");
+            break;
+            default:
+                Loger("Radius authorization system:UNKNOWN\n");
+        }
+
+        if(Parser.sScommIp[0]) Logerf("scomm ip:%s\n", Parser.sScommIp);
+        Logerf("scomm port:%u\n", Parser.nScommPort);
+        if(Parser.sScommPassword[0]) Logerf("scomm password:%s\n", Parser.sScommPassword);
+        if(Parser.fRadAuthPrepay) Loger("Authorization prepay\n");
+    }
+    Logerf("Log file size:%d MB\n", Parser.nLogFileSize);
+    Loger("<--------------------------------------------------------------------------->\n\n");
 }
 
 int max(int x, int y)
@@ -770,9 +848,89 @@ int max(int x, int y)
     return x > y ? x : y;
 }
 
+void SMPWritePacket (BYTE* data, short len )
+{
+    pthread_mutex_lock(&SMPfMutex);
+    if(SMP)
+        SMP->SendPacket(data, len);
+    pthread_mutex_unlock(&SMPfMutex);
+
+    /*
+    if(pthread_mutex_trylock(&SMPfMutex) == 0)
+    {
+        if(SMP)
+            SMP->SendPacket(data, len);
+        pthread_mutex_unlock(&SMPfMutex);
+    }
+    */
+}
+
+CSMPClient *SMPCreate (const char *ip, unsigned short port, int con )
+{
+    CSMPClient *psmp = new CSMPClient(con);
+    if(!psmp)
+        return NULL;
+    psmp->SetThreadPriority(SCHED_OTHER, 0);
+    psmp->SetMutex(&SMPfMutex);
+    const char *str = psmp->MyConnect(ip, port);
+    if (str)
+    {
+        psmp->OnClose(str);
+        return NULL;
+    }
+    if(psmp->SwitchBinary(Parser.sScommPassword))
+    {
+        psmp->OnClose("BINARYMODE failed");
+        return NULL;
+    }
+    return psmp;
+}
+
+void *Prepay_ptread(void* arg)
+{
+    pthread_detach(pthread_self());
+    int delay = 30;
+
+    while(fMainRun)
+    {
+        usleep(100*1000);
+        if(delay++ < 50)
+            continue;
+
+        delay = 0;
+
+        CNetMessageBody xmes;
+        xmes.dst.nMod = 0xFF;
+        xmes.nMessage = NET_MES_REGISTER_PREPAY;
+        xmes.un.multi.set.Full();
+
+        uc buf[sizeof(CNetMessageBody)];
+        uc* p = xmes.encode(buf);
+        short len = p - buf;
+        SMPWritePacket(buf, len);
+    }
+
+    return NULL;
+}
+
 void *Server_ptread(void* arg)
 {
     pthread_detach(pthread_self());
+
+    bool fCheckSMP = false;
+    int nNoSMPCnt = 5;
+
+    if(Parser.sScommIp[0] && Parser.nScommPort)
+    {
+        fCheckSMP = true;
+        if(Parser.fRadAuthPrepay)
+        {
+            pthread_t Prepay_tid;
+            if (pthread_create(&Prepay_tid, NULL, &Prepay_ptread, NULL) != 0 )
+                Loger("Can't create prepay tread!\n");
+        }
+    }
+
     char log[100];
     char Client_Ip[MAX_CONNECT_POINT/2][16];
     fd_set fds;
@@ -781,8 +939,21 @@ void *Server_ptread(void* arg)
     socklen_t client_addr_size = sizeof(client_addr);
     int retval;
     int i, maxfd = 0;
-    while(1)
+
+    while(fMainRun)
     {
+        if(fCheckSMP)
+        {
+            if(!SMP)
+            {
+                if(nNoSMPCnt++ >= 5)
+                {
+                    SMP = SMPCreate (Parser.sScommIp, Parser.nScommPort, 0);
+                    nNoSMPCnt = 0;
+                }
+            }
+        }
+
         FD_ZERO(&fds);
         for (i = 0; i < MAX_CONNECT_POINT; i++) //3 servers and 3 clients
         {
@@ -817,7 +988,7 @@ void *Server_ptread(void* arg)
                         }
                         else//Esli kanal rabochij dobavliajem novogo klienta
                         {
-                            if (make_nonblock(clnt_fd)<0)
+                            if (make_nonblock(clnt_fd) < 0 )
                             {
                                 close(clnt_fd);
                                 sprintf(log,"Server %s: Can't make client socket nonblock! IP:%s\n", 
@@ -827,7 +998,7 @@ void *Server_ptread(void* arg)
                             else
                             {
                                 connect_point[i + MAX_CONNECT_POINT/2] = clnt_fd;
-                                strcpy(Client_Ip[i],inet_ntoa(client_addr.sin_addr));
+                                strcpy(Client_Ip[i], inet_ntoa(client_addr.sin_addr));
                                 sprintf(log,"Server %s: Client connected! IP:%s\n", GetConnectStr(i), Client_Ip[i]);
                                 Loger(log);
                             }
@@ -841,7 +1012,7 @@ void *Server_ptread(void* arg)
                     if (size > 0) // if rcv data from client socket
                     {
                     }
-                    else if ((size == 0) || ((size == -1)&&(errno != EINTR)))
+                    else if ((size == 0) || ((size == -1) && (errno != EINTR)))
                     {
                         sprintf(log, "Server %s: Client disconnected! IP:%s\n", GetConnectStr(i), Client_Ip[i]);
                         Loger(log);
@@ -856,9 +1027,8 @@ void *Server_ptread(void* arg)
             Loger("Server pthread internal error!\n");
         }
     }
-    return(NULL);
+    return NULL;
 }
-
 
 void get_file_names(char *output, const char *base)
 {
@@ -882,10 +1052,197 @@ void get_file_names(char *output, const char *base)
     }
 }
 
+void sig_SIGTERM_hndlr(int signo)
+{
+    Loger("Terminating process...\n");
+    fMainRun = false;
+}
+
+void sig_SIGPIPE_hndlr(int signo)
+{
+    Loger("Signal SIGPIPE received!\n");
+}
+
+typedef unsigned long long  DDWORD; // 64
+
+#define  _ARM_
+#ifdef  _ARM_
+//  первая вуква - макрос ARM архитектуры
+//  вторая вуква R - считывание X - запись
+//  третья и четвёртая буквы - тип данных
+
+    #define LRW(X) _LRW(&(X))
+    #define LRS(X) _LRS(&(X))
+    #define LRD(X) _LRD(&(X))
+    #define LRI(X) _LRI(&(X))
+    #define LRDD(X) _LRDD(&(X))
+
+    #define LXW(X, Y) _LXW(&(X), (Y))
+    #define LXS(X, Y) _LXS(&(X), (Y))
+    #define LXD(X, Y) _LXD(&(X), (Y))
+    #define LXI(X, Y) _LXI(&(X), (Y))
+    #define LXDD(X, Y) _LXDD(&(X), (Y))
+
+    #define LARMCHECK(X)  {if (_LARMCHECK(X)) WARNING;}
+
+    inline WORD _LRW ( WORD* X )
+    {
+        if (!(((DWORD)X) & 1))
+            return *X;
+        WORD ret;
+        ((BYTE*)&ret)[0] = ((BYTE*)X)[0];
+        ((BYTE*)&ret)[1] = ((BYTE*)X)[1];
+        return ret;
+    }
+
+    inline short _LRS ( short* X )
+    {
+        if (!(((DWORD)X) & 1))
+            return *X;
+        short ret;
+        ((BYTE*)&ret)[0] = ((BYTE*)X)[0];
+        ((BYTE*)&ret)[1] = ((BYTE*)X)[1];
+        return ret;
+    }
+
+    inline DWORD _LRD ( DWORD* X )
+    {
+        if (!(((DWORD)X) & 3))
+            return *X;
+        DWORD ret;
+        ((BYTE*)&ret)[0] = ((BYTE*)X)[0];
+        ((BYTE*)&ret)[1] = ((BYTE*)X)[1];
+        ((BYTE*)&ret)[2] = ((BYTE*)X)[2];
+        ((BYTE*)&ret)[3] = ((BYTE*)X)[3];
+        return ret;
+    }
+
+    inline int _LRI ( int* X )
+    {
+        if (!(((DWORD)X) & 3))
+            return *X;
+        int ret;
+        ((BYTE*)&ret)[0] = ((BYTE*)X)[0];
+        ((BYTE*)&ret)[1] = ((BYTE*)X)[1];
+        ((BYTE*)&ret)[2] = ((BYTE*)X)[2];
+        ((BYTE*)&ret)[3] = ((BYTE*)X)[3];
+        return ret;
+    }
+
+    inline DDWORD _LRDD ( DDWORD* X )
+    {
+        if (!(((DWORD)X) & 7))
+            return *X;
+        DDWORD ret;
+        ((BYTE*)&ret)[0] = ((BYTE*)X)[0];
+        ((BYTE*)&ret)[1] = ((BYTE*)X)[1];
+        ((BYTE*)&ret)[2] = ((BYTE*)X)[2];
+        ((BYTE*)&ret)[3] = ((BYTE*)X)[3];
+        ((BYTE*)&ret)[4] = ((BYTE*)X)[4];
+        ((BYTE*)&ret)[5] = ((BYTE*)X)[5];
+        ((BYTE*)&ret)[6] = ((BYTE*)X)[6];
+        ((BYTE*)&ret)[7] = ((BYTE*)X)[7];
+        return ret;
+    }
+
+    // ************************
+
+    inline void _LXW ( WORD* X, WORD Y )
+    {
+        if (!(((DWORD)X) & 1))
+        {
+            *X = Y;
+            return;
+        }
+        ((BYTE*)X)[0] = ((BYTE*)&Y)[0];
+        ((BYTE*)X)[1] = ((BYTE*)&Y)[1];
+    }
+
+    inline void _LXS ( short* X, short Y )
+    {
+        if (!(((DWORD)X) & 1))
+        {
+            *X = Y;
+            return;
+        }
+        ((BYTE*)X)[0] = ((BYTE*)&Y)[0];
+        ((BYTE*)X)[1] = ((BYTE*)&Y)[1];
+    }
+
+    inline void _LXD ( DWORD* X, DWORD Y )
+    {
+        if (!(((DWORD)X) & 3))
+        {
+            *X = Y;
+            return;
+        }
+        ((BYTE*)X)[0] = ((BYTE*)&Y)[0];
+        ((BYTE*)X)[1] = ((BYTE*)&Y)[1];
+        ((BYTE*)X)[2] = ((BYTE*)&Y)[2];
+        ((BYTE*)X)[3] = ((BYTE*)&Y)[3];
+    }
+
+    inline void _LXI ( int* X, int Y )
+    {
+        if (!(((DWORD)X) & 3))
+        {
+            *X = Y;
+            return;
+        }
+        ((BYTE*)X)[0] = ((BYTE*)&Y)[0];
+        ((BYTE*)X)[1] = ((BYTE*)&Y)[1];
+        ((BYTE*)X)[2] = ((BYTE*)&Y)[2];
+        ((BYTE*)X)[3] = ((BYTE*)&Y)[3];
+    }
+
+    inline void _LXDD ( DDWORD* X, DDWORD Y )
+    {
+        if (!(((DWORD)X) & 7))
+        {
+            *X = Y;
+            return;
+        }
+        ((BYTE*)X)[0] = ((BYTE*)&Y)[0];
+        ((BYTE*)X)[1] = ((BYTE*)&Y)[1];
+        ((BYTE*)X)[2] = ((BYTE*)&Y)[2];
+        ((BYTE*)X)[3] = ((BYTE*)&Y)[3];
+        ((BYTE*)X)[4] = ((BYTE*)&Y)[4];
+        ((BYTE*)X)[5] = ((BYTE*)&Y)[5];
+        ((BYTE*)X)[6] = ((BYTE*)&Y)[6];
+        ((BYTE*)X)[7] = ((BYTE*)&Y)[7];
+    }
+
+    inline bool _LARMCHECK ( void* X )
+    {
+        return (((DWORD)X) & 3);
+    }
+
+#else
+    #define LRW(X) (X)
+    #define LRS(X) (X)
+    #define LRD(X) (X)
+    #define LRI(X) (X)
+    #define LRDD(X) (X)
+
+    #define LXW(X, Y) ((X) = (Y))
+    #define LXS(X, Y) ((X) = (Y))
+    #define LXD(X, Y) ((X) = (Y))
+    #define LXI(X, Y) ((X) = (Y))
+    #define LXDD(X, Y) ((X) = (Y))
+
+    #define LARMCHECK(X)
+#endif
+
+//============================== класс CSIPMessage ==============================
 
 int main(int argc, char *argv[])
 {
+
+    BYTE buf[10];
+    LXDD(*(DDWORD*)(buf + 1), 0xAABBCCDDEEFF1122ULL);
+    DDWORD dir = LRDD(*(DDWORD*)&buf[1]);
     /*
+    printf("std::string%d\n",sizeof(std::string));
     printf("TClock:%d\n",sizeof(TClock));
     printf("strCDRTrunkUnit:%d\n",sizeof(CDRBuilding::strCDRTrunkUnit));
     printf("strCDR:%d\n",sizeof(CDRBuilding::strCDR));
@@ -895,48 +1252,70 @@ int main(int argc, char *argv[])
     printf("strModuleInfo:%d\n",sizeof(CDRBuilding::strModuleInfo));
     printf("strLocalNumbersSettings:%d\n",sizeof(CDRBuilding::strLocalNumbersSettings));
     printf("CCDRBuilder:%d\n",sizeof(CDRBuilding::CCDRBuilder));
-    //exit(1);
-    BYTE bt[8];
-    bt[0] = 0;
-    bt[1] = 1;
-    bt[2] = 2;
-    bt[3] = 3;
-    bt[4] = 0xFF;
-    bt[5] = 5;
-    bt[6] = 6;
-    bt[7] = 7;
-    DWORD dw = 0;
-    if( !((DWORD)&bt[0] & 3))
-    {
-        dw = *(DWORD*)&bt[1];
-        printf("Odd adr0:%x adr:%x val:%x\n",(DWORD)&bt[0],(DWORD)&bt[1], dw);
-    }
-    else
-    {
-        dw = *(DWORD*)&bt[0];
-        printf("Not odd adr0:%x adr:%x val:%x\n",(DWORD)&bt[0],(DWORD)&bt[0], dw);
-    }
-    */
-    /*
-    char test[80], blah[80];
-     char *sep = "\\/:;=-";
-     char *word, *phrase, *brkt, *brkb, *b1 = test, *b2 = blah;
-
-     strcpy(test, "This;/is.a:test:of=the/string\\tokenizer-function.");
-
-     for (word = strtok_r(test, sep, &brkt); word; word = strtok_r(NULL, sep, &brkt))
-     {
-         strcpy(blah, "blah:;;blat:blab:blag");
-
-         for (phrase = strtok_r(blah, sep, &brkb); phrase; phrase = strtok_r(NULL, sep, &brkb))
-         {
-             printf("So far we're at{} %s:%s\n", word, phrase);
-         }
-     }
     */
 
-    if (Parser.ParseCStringParams(argc, argv) < 0)
-        exit(EXIT_FAILURE);
+    sigfillset(&sact.sa_mask);
+    sact.sa_flags = 0;
+    sact.sa_handler = sig_SIGTERM_hndlr;
+    sigaction(SIGINT, &sact, NULL);
+    sigaction(SIGTERM, &sact, NULL);
+
+    sigemptyset(&sact.sa_mask);
+    sact.sa_handler = sig_SIGPIPE_hndlr;
+    sigaction(SIGPIPE, &sact, NULL);
+
+    if (Parser.ParseCStringParams(argc, argv, false) < 0)
+        return EXIT_FAILURE;
+
+    if (Parser.Prepare() < 0)
+        return EXIT_FAILURE;
+//-------------------------------Only Rarius------------------------------------------
+    if(Parser.fNoTarif)
+    {
+        Visualisation("No tarif");
+
+        if (Parser.fDaemon)
+            daemon(0,0);
+
+        bool fCheckSMP = false;
+        int nNoSMPCnt = 5;
+
+        if(Parser.sScommIp[0] && Parser.nScommPort)
+        {
+            fCheckSMP = true;
+            if(Parser.fRadAuthPrepay)
+            {
+                pthread_t Prepay_tid;
+                if (pthread_create(&Prepay_tid, NULL, &Prepay_ptread, NULL) != 0 )
+                    Loger("Can't create prepay tread!\n");
+            }
+            else
+            {
+                Loger("Set authorization prepay!\n");
+                return EXIT_FAILURE;
+            }
+        }
+
+        while (fMainRun)
+        {
+            if(fCheckSMP)
+            {
+                if(!SMP)
+                {
+                    if(nNoSMPCnt++ >= 5)
+                    {
+                        SMP = SMPCreate (Parser.sScommIp, Parser.nScommPort, 0);
+                        nNoSMPCnt = 0;
+                    }
+                }
+            }
+            sleep(1);
+        }
+        if(SMP)
+            SMP->OnClose("Exit program");
+        usleep(500*1000);
+        return EXIT_SUCCESS;
+    }
 
     builder.SetCommonSettings(&Parser.SSettings);
     builder.SetJournalSettings(&Parser.Sett);
@@ -947,51 +1326,48 @@ int main(int argc, char *argv[])
     DWORD dwLen;
     DWORD dwError;
 
-    if (Parser.sSpiderIp) //OnLine mode
+//-------------------------------OnLine mode------------------------------------------
+    if (Parser.sSpiderIp)
     {
-        if (!Parser.SpiderPort)
-            Parser.SpiderPort = 10002;
-
-        if (!Parser.ServerPort)
-            Parser.ServerPort = Parser.SpiderPort + 1;
-
         if (Parser.FillOnLineParams(Parser.sTfsFileNameBase) < 0)
-            exit(EXIT_FAILURE);
+            return EXIT_FAILURE;
 
-        StrToLog("Callbuilder started....\n");
         Visualisation("from spider online");
 
         for( int i = 0; i < MAX_CONNECT_POINT/2; i++ )
         {
             connect_point[i + MAX_CONNECT_POINT/2] = 0;
-            if( (connect_point[i] = Create_server_point(Parser.ServerPort + 1 + i, i)) <0) 
+            if( (connect_point[i] = Create_server_point(Parser.ServerPort + i, i)) < 0)
             {
-                printf("Error create server %s point!\n",GetConnectStr(i));
+                Logerf("Error create server %s point!\n", GetConnectStr(i));
                 connect_point[i] = 0;
             }
         }
 
-
         if (Parser.fDaemon)
             daemon(0,0);
 
-        while ((Spider_fd = Login_ethernet(Parser.sSpiderIp, Parser.SpiderPort)) < 0)
-        {
+        while ((Spider_fd = Login_ethernet(Parser.sSpiderIp, Parser.SpiderPort)) < 0 && fMainRun)
             sleep(5);
-        }
-
 
         pthread_t Server_tid;
         if(connect_point[0] || connect_point[1] || connect_point[2])
         {
-            if (pthread_create(&Server_tid,NULL,&Server_ptread,NULL)!=0)
+            if (pthread_create(&Server_tid, NULL, &Server_ptread, NULL) != 0 )
             {
                 Loger("Can't create server tread!\n");
+                return EXIT_FAILURE;
             }
+        }
+        else
+        {
+            Loger("No any server point!\n");
+            return EXIT_FAILURE;
         }
 
         iReadBytes = 0;
-        while (true)
+
+        while (fMainRun)
         {
             //chtenije dlinni mesagi
             dwTmp = read(Spider_fd, &dwLen, sizeof(DWORD));
@@ -999,37 +1375,31 @@ int main(int argc, char *argv[])
             {
                 Loger("Spider socket closed!\n");
                 close(Spider_fd);
-                while ((Spider_fd = Login_ethernet(Parser.sSpiderIp, Parser.SpiderPort)) < 0)
-                {
+                while ( fMainRun && (Spider_fd = Login_ethernet(Parser.sSpiderIp, Parser.SpiderPort)) < 0 )
                     sleep(5);
-                }
                 continue;
             }
             iReadBytes += sizeof(DWORD);
 
-            if (!dwLen || dwLen > sizeof(CMonMessageEx)+1)        // грубая проверка
+            if (!dwLen || dwLen > sizeof(CMonMessageEx) + 1)        // грубая проверка
             {
                     Loger( "Error: Message lengh is incorrect!\n");
                     close(Spider_fd);
-                    while ((Spider_fd = Login_ethernet(Parser.sSpiderIp, Parser.SpiderPort)) < 0)
-                    {
+                    while (fMainRun && (Spider_fd = Login_ethernet(Parser.sSpiderIp, Parser.SpiderPort)) < 0 )
                         sleep(5);
-                    }
                     continue;
             }
 
             //chtenije mesagi
-            unsigned char buff[sizeof(CMonMessageEx)+1];
+            unsigned char buff[sizeof(CMonMessageEx) + 1];
 
             dwTmp = read(Spider_fd, &buff,dwLen);
             if (dwTmp != dwLen)
             {
                 Loger("Spider socket error!\n");
                 close(Spider_fd);
-                while ((Spider_fd = Login_ethernet(Parser.sSpiderIp, Parser.SpiderPort)) < 0)
-                {
+                while ( fMainRun && (Spider_fd = Login_ethernet(Parser.sSpiderIp, Parser.SpiderPort)) < 0 )
                     sleep(5);
-                }
                 continue;
             }
             iReadBytes += dwLen;
@@ -1037,7 +1407,7 @@ int main(int argc, char *argv[])
             //dekodirovanie mesagi
             CMonMessageEx mes(0);
             BYTE *p;
-            if (!(p = mes.decode(buff, dwLen-1)))
+            if (!(p = mes.decode(buff, dwLen - 1)))
             {
                 Loger("Error: error while decoding message!\n");
                 continue;
@@ -1095,9 +1465,13 @@ int main(int argc, char *argv[])
         close(Spider_fd);
         ComleteOnLineActions();
         builder.FreeListMem(lstStr);
+        if(SMP)
+            SMP->OnClose("Exit program");
+        usleep(500*1000);
     }
 
-    else if (!Parser.TfsFileList.empty()) //File mode
+//-------------------------------File mode------------------------------------------
+    else if (!Parser.TfsFileList.empty())
     {
         printf("Callbuilder: processing %d file(s)\n",Parser.TfsFileList.size());
         CDRBuilding::TPCharList::const_iterator it;
@@ -1108,7 +1482,7 @@ int main(int argc, char *argv[])
                 if(Parser.TfsFileList.size() > 1)
                     continue;
                 else
-                    exit(EXIT_FAILURE);
+                    return EXIT_FAILURE;
             }
 
             Parser.RefreshResidFileName();
@@ -1122,7 +1496,7 @@ int main(int argc, char *argv[])
                 if(Parser.TfsFileList.size() > 1)
                     continue;
                 else
-                    exit(EXIT_FAILURE);
+                    return EXIT_FAILURE;
             }
 
             off_t MainFilelen = 0;
@@ -1130,18 +1504,23 @@ int main(int argc, char *argv[])
             lseek(fd_tfs, 0, SEEK_SET);
 
             RemoveFiles();
-            PutResiduaryCalls(Parser.sInDir, Parser.sInRm3FileName);
-
+            if(PutResiduaryCalls(Parser.sInDir, Parser.sInRm3FileName) < 0)
+            {
+                if(Parser.TfsFileList.size() > 1)
+                    continue;
+                else
+                    return EXIT_FAILURE;
+            }
             BYTE RdPersent = 0;
             iReadBytes = 0;
 
-            while (true)
+            while (fMainRun)
             {
                 //chtenije dlinni mesagi
                 dwTmp = read(fd_tfs, &dwLen, sizeof(DWORD));
                 if (dwTmp != sizeof(DWORD))
                 {
-                    if (!dwTmp) //EOF 
+                    if (!dwTmp) //EOF
                     {
                         strcpy(sMessage, "Processing complete!\n");
                         if (Parser.fRem_rm3)
@@ -1179,8 +1558,7 @@ int main(int argc, char *argv[])
                 BYTE *p;
                 if (!(p = mes.decode(buff, dwLen)))
                 {
-                    strcpy(sMessage,
-                           "Error: error while decoding message!\n");
+                    strcpy(sMessage, "Error: error while decoding message!\n");
                     break;
                 }
 
@@ -1243,9 +1621,9 @@ int main(int argc, char *argv[])
             ComleteActions();
             builder.FreeListMem(lstStr);
         }
-        return EXIT_SUCCESS;
     }
     else
         printf("No tfs files in directory!\n");
+
     return EXIT_SUCCESS;
 }

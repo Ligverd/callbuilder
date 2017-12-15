@@ -1,7 +1,7 @@
 //#include  <include/monitor.h>
 #include  <string.h>
-#include  <include/monmessage.h>
-#include  <include/unipar.h>
+#include  <monmessage.h>
+#include  <unipar.h>
 
 #include  <stdlib.h>
 
