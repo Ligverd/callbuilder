@@ -13,8 +13,9 @@
 #include <radius_md5.h>
 
 void rc_md5_calc(unsigned char *output, unsigned char *input,
-		     size_t inlen)
+		     uint32_t int_inlen)
 {
+	size_t inlen = int_inlen;
 	MD5_CTX	context;
 
 	MD5Init(&context);

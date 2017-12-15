@@ -255,7 +255,7 @@ const char* CSMPClient::MyConnect ( const char *ip, unsigned short port)
     if (!host)
         return "SMP Client: Error resolve server!";
 
-    unsigned long adr;
-    memcpy(&adr, host->h_addr_list[0], sizeof(unsigned long));
+    uint64_t adr;
+    memcpy(&adr, host->h_addr_list[0], sizeof(uint64_t));
     return ConnectAddr(adr, port, true);
 }

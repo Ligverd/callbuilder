@@ -1126,7 +1126,7 @@ const char* CSIPMessage::getMessageHeaderPtr( void ) const
     if(!m_MessageLen)
         return NULL;
 
-    char *ptr = strstr(m_sMessage, CRLF_CHARS);
+    char *ptr = (char*)strstr(m_sMessage, CRLF_CHARS);
     if(!ptr)
         return NULL;
 
@@ -1147,7 +1147,7 @@ const char* CSIPMessage::getMessageBodyPtr( void ) const
     if(!m_MessageLen)
         return NULL;
 
-    char *ptr = strstr(m_sMessage, "\r\n\r\n");
+    char *ptr = (char*)strstr(m_sMessage, "\r\n\r\n");
     if(!ptr)
         return NULL;
 
@@ -1236,7 +1236,7 @@ bool CSIPMessage::__getNextHeader(char* buffer, size_t size, const char **last) 
 {
     MYASSERT_RET_FALSE(buffer);
     const char *start = *last;
-    char *end = strstr(start, CRLF_CHARS);
+    char *end = (char*)strstr(start, CRLF_CHARS);
 
     if(end)
     {
@@ -1580,7 +1580,7 @@ bool CSIPMessage::retreiveParamFromHeader(const char* sParamName, const char* sH
 
     size_t param_len = strlen(sParamName);
 
-    char *v = strchr(sHeader, ':');
+    char *v = (char*)strchr(sHeader, ':');
     if(!v)
         return false;
 
@@ -1985,7 +1985,7 @@ bool CSIPMessage::getDisplayName(const char* sHeaderName, char* name, size_t siz
 
 bool CSIPMessage::getHostPortFromVia(const char* Via, char* host, size_t host_size, WORD* port)
 {
-    char *ch = strchr(Via, ':');
+    char *ch = (char*)strchr(Via, ':');
     if(!ch)
         return false;
 

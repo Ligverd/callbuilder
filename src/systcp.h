@@ -2,6 +2,7 @@
 #define _SYS_TCP_H_
 
 #include <pthread.h>
+#include <stdint.h>
 
 class CSYSTCPTransport
 {
@@ -50,7 +51,7 @@ class CSYSTCPClientDirect : public CSYSTCPTransport
 
 public:
     const char* Connect ( const char *host, unsigned short port, bool fWait = true);
-    const char* ConnectAddr( unsigned long addr, unsigned short port, bool fWait = true);
+    const char* ConnectAddr( uint32_t addr, unsigned short port, bool fWait = true);
 };
 
 

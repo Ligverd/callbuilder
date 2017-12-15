@@ -111,7 +111,7 @@ const char* CSYSTCPTransport::Send ( const void* data, int len )
 
 const char* CSYSTCPClientDirect::Connect ( const char *host, unsigned short port, bool fWait )
 {
-    unsigned long addr = inet_addr(host);
+    uint32_t addr = inet_addr(host);
 
     if( addr == INADDR_NONE ){
         return "invalid host";
@@ -119,7 +119,7 @@ const char* CSYSTCPClientDirect::Connect ( const char *host, unsigned short port
     return ConnectAddr(addr, port, fWait);
 }
 
-const char* CSYSTCPClientDirect::ConnectAddr( unsigned long addr, unsigned short port, bool fWait)
+const char* CSYSTCPClientDirect::ConnectAddr( uint32_t addr, unsigned short port, bool fWait)
 {
 
     assert(fWait);
