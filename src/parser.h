@@ -54,8 +54,10 @@ public:
 
     bool fDaemon;
 
-	struct CDRBuilding::strJournalSettings pSett;
-	struct CDRBuilding::strCDRBuilderSettings pSSettings;
+    struct CDRBuilding::strCDRBuilderSettings SSettings;
+	struct CDRBuilding::strJournalSettings Sett;
+    CDRBuilding::TListInterval lstLocalNumbers;
+    CDRBuilding::strPrefix SPrefix;
 	
 	int RefreshResidFileName (void);
 	int ParseCStringParams (int argc, char *argv[]);

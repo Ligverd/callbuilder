@@ -20,6 +20,9 @@
 #ifndef CALLBUILDER_H
 #define CALLBUILDER_H
 
+//#define TCP_OPT
+//#define FREE_BSD
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,8 +30,6 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <netdb.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
@@ -38,7 +39,14 @@
 #include <CDRBuilder.h>
 #include <Errors.h>
 #include <time.h>
-#include <wait.h>
+
+#ifndef CYGWIN
+    #ifdef FREE_BSD
+        #include <sys/wait.h>
+    #else
+        #include <wait.h>
+    #endif
+#endif
 
 #ifdef FREE_BSD
 #include <sys/types.h>

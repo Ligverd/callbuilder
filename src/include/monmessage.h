@@ -27,6 +27,8 @@ const   unsigned char   MON_SPIDER_TCP_DOWN         =  6;   // time:TClock
 const   unsigned char   MON_SPIDER_USER_STOP        =  7;   // time:TClock
 const   unsigned char   MON_SPIDER_INFO             =  8;   // OSver:DWORD  SPIDERver:DWORD time:TClock
 const   unsigned char   MON_SPIDER_INFO_EX          =  9;   // OSver:String SPIDERver:DWORD time:TClock
+const   unsigned char   MON_SPIDER_BAD_PACKET       = 60;   // time:TClock
+const   unsigned char   MON_SPIDER_GATE_LOST		= 61;   // module:BYTE time:TClock
 // от портов
 const   unsigned char   MON_SEIZURE                 = 10;   // sig:BYTE module:BYTE slot/pcm:BYTE hole/ki:BYTE number:STRING aon:STRING
 const   unsigned char   MON_NUMBER                  = 11;   // number:STRING aon:STRING // здесь же будет ДВО
@@ -70,14 +72,11 @@ class CMonMessageEx
 private:
 //    static int      readPos_;               // временная переменная для хранения указателя чтения данных
 
-    TCallID         id_;                    // идентификатор вызова
-    
     BYTE            time_;                  // относительное время в секундах
+    TCallID         id_;                    // идентификатор вызова
     BYTE            message_;               // мессага
 
     unsigned char   size_;                  // размер
-    char            dummy[1];
-    
     BYTE            data_[MAXSIZEDATAMON];  // параметры мессаги
 
     // доступ к данным
@@ -109,8 +108,14 @@ public:
     // запись
     void addParameterByte(BYTE b)           { data_[size_++] = b; }
     void addParameterDWord(DWORD d) { 
-       LXD(*(DWORD*)(data_+size_), d);
-       size_ += sizeof(DWORD);
+    #ifdef __ARM__
+        *(data_+size_++) = (BYTE)d;
+        *(data_+size_++) = (BYTE)(d >> 8);
+        *(data_+size_++) = (BYTE)(d >> 16);
+        *(data_+size_++) = (BYTE)(d >> 24);
+    #else
+        *(DWORD*)&data_[size_] = d; size_ += sizeof(DWORD); 
+    #endif
     }
 
     void addParameterString(const char* s);
@@ -119,8 +124,15 @@ public:
     // чтение
     BYTE    getParameterByte(int& readPos) const  { return data_[readPos++]; }
     DWORD   getParameterDWord(int& readPos) const {
-        DWORD d = LRD(*(DWORD*)(data_+readPos)); 
-        readPos += sizeof(DWORD); 
+        #ifdef __ARM__
+            DWORD d = *(data_+readPos++);
+                d |= *(data_+readPos++) << 8;
+                d |= *(data_+readPos++) << 16;
+                d |= *(data_+readPos++) << 24;
+        #else
+            DWORD d = *(DWORD*)(data_+readPos); 
+            readPos += sizeof(DWORD); 
+        #endif
         return  d;
     }
     const char*   getParameterStringPtr(int& readPos) const;

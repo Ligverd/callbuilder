@@ -7,15 +7,6 @@
 
 #include <include/type.h>
 
-WORD _LRW ( WORD* X );
-short _LRS ( short* X );
-DWORD _LRD ( DWORD* X );
-int _LRI ( int* X );
-void _LXW ( WORD* X, WORD Y );
-void _LXS ( short* X, short Y );
-void _LXD ( DWORD* X, DWORD Y );
-void _LXI ( int* X, int Y );
-
 int printdword( char *str, DWORD n, short basic );
 int printformat( char *str, const char *format, BYTE *ptr );
 int sprintformat( char *str, const char *format, ... );

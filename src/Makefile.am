@@ -1,6 +1,6 @@
 bin_PROGRAMS = callbuilder
 callbuilder_SOURCES = callbuilder.cpp parser.cpp CDRBuilder.cpp monmessage.cpp \
-	lib.cpp unipar_pf.cpp
+	unipar_pf.cpp
 
 # set the include path found by configure
 INCLUDES= $(all_includes)

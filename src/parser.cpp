@@ -40,15 +40,21 @@ CParser::CParser()
     SpiderPort = 0;
     ServerPort = 0;
 
-	pSett.bEnable = true;
-	pSett.iMaxDuration = 20000;
+	Sett.bEnable = true;
+	Sett.iMaxDuration = 20000;
 	
-	pSSettings.bWriteBinary2 = true;
-	pSSettings.bWriteUnansweredCalls = true;
-	strcpy(pSSettings.sNoNumberString,"-");
-	pSSettings.btCDRStringFormat = FORMAT_CDR_EX;
-	pSSettings.bDecrementDuration = false;
-	pSSettings.sSampleString[0] = 0;
+	SSettings.bWriteBinary2 = true;
+	SSettings.bWriteUnansweredCalls = true;
+	strcpy(SSettings.sNoNumberString,"-");
+	SSettings.btCDRStringFormat = FORMAT_CDR_EX;
+	SSettings.bDecrementDuration = false;
+    SSettings.bDeleteFirstDigitFromAON = false;
+	SSettings.sSampleString[0] = 0;
+
+    lstLocalNumbers.clear();
+    SPrefix.bCutPrefix = false;
+    SPrefix.sPrefix[0] = 0;
+
 	fConvert = false;
 	fRem_rm3 = false;
     fDaemon = false;
@@ -66,6 +72,7 @@ CParser::~CParser()
     if(sSpiderIp) free(sSpiderIp);
     if(sLogFile) free(sLogFile);
 	FreeListMem(TfsFileList);
+    lstLocalNumbers.clear();
 }
 
 int CParser::check_d(const char *str)
@@ -186,7 +193,7 @@ int CParser::RefreshResidFileName()
 			itime = mktime (&T);
 			itime += 86400;
 			localtime_r(&itime,&T);
-			sprintf(str,"%s%02d_%02d_%01d.rm3",T.tm_mday,T.tm_mon+1,T.tm_year-100);
+			sprintf(str,"%02d_%02d_%01d.rm3",T.tm_mday,T.tm_mon+1,T.tm_year-100);
 		break;
 		default:
 			RETURNERR("Parser: Error tfs file type!\n");
@@ -270,7 +277,7 @@ int CParser::ParseCStringParams (int argc, char *argv[])
         }
 		else if(!strcmp(argv[i],"-nojournal"))
 		{
-			pSett.bEnable = false;
+			Sett.bEnable = false;
 		}
 		else if(!strcmp(argv[i],"-maxduration"))
 		{
@@ -279,7 +286,7 @@ int CParser::ParseCStringParams (int argc, char *argv[])
 			{
 				if (check_d(argv[i]))
 				{
-					pSett.iMaxDuration = atoi(argv[i]);
+					Sett.iMaxDuration = atoi(argv[i]);
 				}
 				else
 					RETURNERR("Parser: Incorrect duration value!\n");
@@ -291,9 +298,9 @@ int CParser::ParseCStringParams (int argc, char *argv[])
 			if (i < argc)
 			{
 				int fr = atoi(argv[i]);
-				if ( fr > 0 && fr < 19)
+				if ( fr > 0 && fr < 21)
 				{
-					pSSettings.btCDRStringFormat = fr;
+					SSettings.btCDRStringFormat = fr;
 				}
 				else
 					RETURNERR("Parser: Incorrect CDR format!\n");
@@ -304,16 +311,24 @@ int CParser::ParseCStringParams (int argc, char *argv[])
 			i++;
 			if (i < argc)
 			{
-				strcpy(pSSettings.sNoNumberString,argv[i]);
+				strcpy(SSettings.sNoNumberString,argv[i]);
 			}
 		}
 		else if(!strcmp(argv[i],"/0"))
 		{
-			pSSettings.bWriteUnansweredCalls = false;
+			SSettings.bWriteUnansweredCalls = false;
 		}
+        else if(!strcmp(argv[i],"/q"))
+        {
+            SSettings.bDecrementDuration = true;
+        }
+        else if(!strcmp(argv[i],"/1"))
+        {
+            SSettings.bDeleteFirstDigitFromAON = true;
+        }
 		else if(!strcmp(argv[i],"-str2boff"))
 		{
-			pSSettings.bWriteBinary2 = false;
+			SSettings.bWriteBinary2 = false;
 		}
 		else if(!strcmp(argv[i],"-convert"))
 		{
@@ -327,7 +342,7 @@ int CParser::ParseCStringParams (int argc, char *argv[])
         {
             fDaemon = true;
         }
-        if(!strcmp(argv[i],"-logfile"))
+        else if(!strcmp(argv[i],"-logfile"))
         {
             i++;
             if (i < argc)
@@ -337,68 +352,140 @@ int CParser::ParseCStringParams (int argc, char *argv[])
                 strcpy(sLogFile, argv[i]);
             }
         }
-		else if(!strcmp(argv[i],"-tfsfile"))
-		{
-			if(!sInDir)
-			{
-				i++;
-				if (i< argc)
-				{
-					//Getting sInDir
-					char *ext;
-					if(!(ext = strrchr( argv[i], (int)'/')))
-					{
-						int j;
-						char *pwd = NULL;
-						for(j = 0; environ[j], !pwd; j++)
-						{
-							if( pwd = strstr(environ[j],"PWD="))
-							{
-								pwd += strlen("PWD="); 
-								sInDir = (char*)malloc(strlen(pwd)+1);
-								if (!sInDir) RETNOMEM;
-								strcpy(sInDir,pwd);
-	
-								char* CharList = (char *)malloc(strlen(argv[i])+1);	
-								if(!CharList) RETNOMEM; 
-								strcpy(CharList, argv[i]);
-								TfsFileList.push_back(CharList);
-							}
-						}
-						if(!pwd)
-							RETURNERR("Parser: enter full path of tfs file!\n");
-					}
-					else
-					{
-						int len = strlen(argv[i]) - strlen(strrchr( argv[i], (int)'/'));
-						sInDir = (char*)malloc(len + 1);
-						if (!sInDir) RETNOMEM;
-						sInDir[len] = 0;
-						memcpy(sInDir, argv[i], len);
-						
-						char* CharList = (char *)malloc(strlen(strrchr( argv[i], (int)'/')+1)+1);	
-						if(!CharList) RETNOMEM; 
-						strcpy(CharList, strrchr( argv[i], (int)'/')+1); 
-						TfsFileList.push_back(CharList);
-					}
-				}
-			}
-		}
-		else if(!strcmp(argv[i],"-tfsdir"))
-		{
-			if(!sInDir)
-			{
-				i++;
-				if (i < argc)
-				{
-					sInDir = (char*)malloc(strlen(argv[i])+1);
-					if (!sInDir) RETNOMEM;
-					strcpy(sInDir, argv[i]);
-					
-					int pid, status, filedes[2];
-					if(!(Pipe(filedes) && make_nonblock(filedes[0]) && make_nonblock(filedes[1])))
-						RETURNERR("Parser: Error making pipe channel!\n");
-					pid = fork();
+        else if(!strcmp(argv[i],"-a164"))
+        {
+            i++;
+            if (i < argc)
+            {
+                SSettings.sA164 = argv[i];
+            }
+        }
+        else if(!strcmp(argv[i],"-b164"))
+        {
+            i++;
+            if (i < argc)
+            {
+                SSettings.sB164 = argv[i];
+            }
+        }
+        else if(!strcmp(argv[i],"-prefix"))
+        {
+            i++;
+            if (i < argc)
+            {
+                if( strlen(argv[i]) > MAX_PREFIX_LENGTH || !check_d(argv[i]) )
+                    continue;
+
+                strcpy(SPrefix.sPrefix, argv[i]);
+                SPrefix.bCutPrefix = true;
+            }
+        }
+        else if(!strcmp(argv[i],"-in"))
+        {
+            i++;
+            if (i < argc)
+            {
+                char str[2*MAX_INTERVAL_LENGTH + 1 + 1];
+
+                if( strlen(argv[i]) > 2*MAX_INTERVAL_LENGTH + 1)
+                    continue;
+                strcpy(str,argv[i]);
+
+                const char *sep = "-";
+                char *pToken = NULL, *ptrptr = NULL;
+                pToken = strtok_r(str, sep, &ptrptr);
+
+                //checks
+                if(!pToken || !ptrptr)
+                    continue;
+
+                if(strlen(pToken) != strlen(ptrptr))
+                    continue;
+
+                if( !check_d(pToken) || !check_d(ptrptr) )
+                    continue;
+
+                if( strcmp(pToken , ptrptr) > 0 )
+                    continue;
+
+                CDRBuilding::strInterval SI;
+                strcpy(SI.beg, pToken);
+                strcpy(SI.end, ptrptr);
+                lstLocalNumbers.push_back(SI);
+            }
+        }
+        else if(!strcmp(argv[i],"-tfsfile"))
+        {
+            if(!sInDir)
+            {
+                i++;
+                if (i< argc)
+                {
+                //Getting sInDir
+                #ifndef PTH_WIN
+                    const char chSlash = '/';
+                #else
+                    const char chSlash = '\\';
+                #endif
+                    char *ext;
+                    if(!(ext = strrchr( argv[i], (int)chSlash)))
+                    {
+                #ifndef CYGWIN
+                        int j;
+                        char *pwd = NULL;
+                        for(j = 0; environ[j], !pwd; j++)
+                        {
+                            if( pwd = strstr(environ[j],"PWD="))
+                            {
+                                pwd += strlen("PWD="); 
+                                sInDir = (char*)malloc(strlen(pwd)+1);
+                                if (!sInDir) RETNOMEM;
+                                strcpy(sInDir,pwd);
+
+                                char* CharList = (char *)malloc(strlen(argv[i])+1);	
+                                if(!CharList) RETNOMEM; 
+                                strcpy(CharList, argv[i]);
+                                TfsFileList.push_back(CharList);
+                            }
+                        }
+                        if(!pwd)
+                            RETURNERR("Parser: enter full path of tfs file!\n");
+                    #else
+                        RETURNERR("Parser: enter full path of tfs file!\n");
+                    #endif
+                    }
+                    else
+                    {
+                        int len = strlen(argv[i]) - strlen(strrchr( argv[i], (int)chSlash));
+                        sInDir = (char*)malloc(len + 1);
+                        if (!sInDir) RETNOMEM;
+                        sInDir[len] = 0;
+                        memcpy(sInDir, argv[i], len);
+
+                        char* CharList = (char *)malloc(strlen(strrchr( argv[i], (int)chSlash)+1)+1);	
+                        if(!CharList) RETNOMEM; 
+                        strcpy(CharList, strrchr( argv[i], (int)chSlash)+1); 
+                        TfsFileList.push_back(CharList);
+                    }
+                }
+            }
+        }
+        else if(!strcmp(argv[i],"-tfsdir"))
+        {
+#if !defined(CYGWIN)
+            if(!sInDir)
+            {
+                i++;
+                if (i < argc)
+                {
+                    sInDir = (char*)malloc(strlen(argv[i])+1);
+                    if (!sInDir) RETNOMEM;
+                    strcpy(sInDir, argv[i]);
+
+                    int pid, status, filedes[2];
+                    if(!(Pipe(filedes) && make_nonblock(filedes[0]) && make_nonblock(filedes[1])))
+                        RETURNERR("Parser: Error making pipe channel!\n");
+                    pid = fork();
 					switch(pid)
 					{
 						case -1:
@@ -443,12 +530,23 @@ int CParser::ParseCStringParams (int argc, char *argv[])
 					}
 				}
 			}
+#endif
 		}
-	}
+        else if(!strcmp(argv[i],"-filename"))
+        {
+            i++;
+            if (i < argc)
+            {
+                sTfsFileNameBase = (char*)malloc(strlen(argv[i])+1);
+                if (!sTfsFileNameBase) RETNOMEM;
+                strcpy(sTfsFileNameBase, argv[i]);
+            }
+        }
+    }
     if(!sSpiderIp)
     {
 	   if(!sInDir)
-		  RETURNERR("Parser: No imput file!\n");
+		  RETURNERR("Parser: No input file!\n");
 	   if(!sOutDir)
 	   {
 		  sOutDir = (char*)malloc(strlen(sInDir)+1);
@@ -462,6 +560,7 @@ int CParser::ParseCStringParams (int argc, char *argv[])
         {
             int j;
             char *pwd = NULL;
+        #ifndef PTH_WIN
             for(j = 0; environ[j], !pwd; j++)
             {
                 if( pwd = strstr(environ[j],"PWD="))
@@ -472,8 +571,15 @@ int CParser::ParseCStringParams (int argc, char *argv[])
                     strcpy(sOutDir,pwd);
                 }
             }
+        #endif
             if(!pwd)
                 RETURNERR("Parser: enter output directory!\n");
+        }
+        if(!sTfsFileNameBase)
+        {
+            sTfsFileNameBase = (char*)malloc(strlen("cdr_log")+1);
+            if (!sTfsFileNameBase) RETNOMEM;
+            strcpy(sTfsFileNameBase, "cdr_log");
         }
     }
     if(!sLogFile)

@@ -14,31 +14,33 @@
 #include <list>
 #include <string>
 
-//#pragma pack (push, 1)
+
 namespace CDRBuilding
 {
 //*****************************************************************************
 // различные DEFINE'ы
 
 //установки класса
-#define FORMAT_CDR_TARIF2002     	        1
-#define FORMAT_CDR_EX				        2
+#define FORMAT_CDR_TARIF2002                1
+#define FORMAT_CDR_EX                       2
 #define FORMAT_CDR_IGOR_DATAGRUPA           3
-#define FORMAT_CDR_KOMLAIN_ED_SHASHIN		4
-#define FORMAT_CDR_VADIM_ELTEL      		5
+#define FORMAT_CDR_KOMLAIN_ED_SHASHIN       4
+#define FORMAT_CDR_VADIM_ELTEL              5
 #define FORMAT_CDR_BARSUM_INNUMBERS         6
 #define FORMAT_CDR_BARSUM_OUTNUMBERS        7
-#define FORMAT_CDR_VADIM_ELTEL_NEW  		8
+#define FORMAT_CDR_VADIM_ELTEL_NEW          8
 #define FORMAT_CDR_UNIVERSAL                9
 #define FORMAT_CDR_FULLSTATISTIC            10
-#define FORMAT_CDR_SHESTIVSKI				11
-#define FROMAT_CDR_KHARITONOV				12
-#define FROMAT_CDR_RASPOL					13
-#define FROMAT_CDR_CERTIFICATION			14
-#define FROMAT_CDR_RASPOL_OUT				15
-#define FROMAT_CDR_RASPOL_INOUT				16
-#define FROMAT_CDR_RASPOL_SUBSAON			17
-#define FROMAT_CDR_SAMPLE_MODE				18
+#define FORMAT_CDR_SHESTIVSKI               11
+#define FORMAT_CDR_KHARITONOV               12
+#define FORMAT_CDR_RASPOL                   13
+#define FORMAT_CDR_CERTIFICATION            14
+#define FORMAT_CDR_RASPOL_OUT               15
+#define FORMAT_CDR_RASPOL_INOUT             16
+#define FORMAT_CDR_RASPOL_SUBSAON           17
+#define FORMAT_CDR_SAMPLE_MODE              18
+#define FORMAT_CDR_TARIFF2000               19
+#define FORMAT_CDR_BGBILLING                20
 
 #define ALL_MODULES							255
 #define PERIOD_CHECK_COMOVER_CALLS			3600
@@ -46,7 +48,7 @@ namespace CDRBuilding
 #define CLOCK_INITIALIZED_EX				22
 #define MAX_RELATIVE_TIME_BREAK				12
 #define MOD_DELTA_UNINIT					2000000000
-#define MAX_TALK_DURATION					3600*10*2
+#define MAX_TALK_DURATION					3600*10*2*10
 
 #define PREFIX_SUBSCRIBER					"A"
 #define PREFIX_TRUNK						"C"
@@ -102,6 +104,10 @@ struct strCDRBuilderSettings
 	bool bDecrementDuration;							//уменьшать продолжительность разговора на 1 сек.
 	BYTE btCDRStringFormat;								//формат CDR-строки
 	char sSampleString[MAX_SAMPLESTRING_LENGTH+1];		//строка-шаблон CDR строк
+    std::string sA164;
+    std::string sB164;
+    bool bDeleteFirstDigitFromAON;                      //удалять первую цифру из АОНа
+    bool bBill2000;                                     //режим совместимости с Биллинг2000
 };
 
 //для внутренних номеров
@@ -302,6 +308,7 @@ public:
 	static const char* SigTypeToStr(BYTE sig);
 
 private:
+    std::string GetFormat164(const char* sNumber, std::string s164Prefix);
 	std::string GetStringParameterBySample(const char* sSample, const CDRBuilding::strCDR& CDR);
 	BOOL CheckCallsGlTime(strCallInfoUnit& MainCallUnit, strCallInfoUnit& SubsCallUnit, bool bLastCheck);
 	void JournalAnalysisMes(CMonMessageEx& mes);
@@ -320,6 +327,7 @@ private:
 	void OnNumber(CMonMessageEx& mes);
 	void OnAnswer(CMonMessageEx& mes);
 	void OnSpiderModuleDown(CMonMessageEx& mes);
+    void OnSpiderGateLost(CMonMessageEx& mes);
 	void ReleaseCalls(BYTE btMod);
 	void ReleaseCall(strCallInfo* pCall, BYTE btReason);
 	void DeleteCallFromList(strCallInfo* pDelCall);
@@ -327,6 +335,7 @@ private:
 	void OnSpiderTcpDown(void);
 	void OnCombine(CMonMessageEx& mes);
 	void MakeCDR(const strCDR& CDR);
+    void DeleteSpaces(char* pStr);
 	void AddJournalString(const char* sStr);
 	void AddCDRString(const char* sStr);
 	void OnRelease(CMonMessageEx& mes);
@@ -342,7 +351,8 @@ private:
 	void WriteAliveTime(strCallInfoUnit* pCallUnit);
 	bool IsInnerNumber(char* pNum, bool bIsAon);
 	void CopyList(TPCharList& lstDest, const TPCharList& lstSrc);
+public:
+    bool IsBilling2000Mode(void);
 };
 }
-//#pragma pack (pop)
 #endif

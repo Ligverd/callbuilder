@@ -20,6 +20,7 @@ nafxcwd.lib(afxmem.obj) : error LNK2005: "void __cdecl operator delete(void *)" 
 #include "Errors.h"
 #define _MSC_VER XXX;
 #define WARNING printf("WARNING: file:%s line:%d\n",__FILE__,__LINE__);
+#include "stdlib.h"
 //changed by pax
 
 #include  <include/unipar.h>
@@ -73,6 +74,7 @@ CDRBuilding::CCDRBuilder::CCDRBuilder()
 	m_SSettings.btCDRStringFormat = FORMAT_CDR_EX;
 	m_SSettings.bDecrementDuration = false;
 	m_SSettings.sSampleString[0] = 0;
+    m_SSettings.bDeleteFirstDigitFromAON = false;
 
 	m_pBegListCall = NULL;
 	m_pEndListCall = NULL;
@@ -92,6 +94,7 @@ void CDRBuilding::CCDRBuilder::SetCommonSettings(const CDRBuilding::strCDRBuilde
 CDRBuilding::CCDRBuilder::~CCDRBuilder(void)
 {
 	CleanCalls();
+    m_SLocalNumbersSettings.lstInterval.clear();
 }
 
 
@@ -225,14 +228,14 @@ BOOL CDRBuilding::CCDRBuilder::ProcessMessage(CMonMessageEx& mes)
     case MON_ALIVE:
         OnAlive(mes);
         break;
+    case MON_SPIDER_BAD_PACKET:
     case MON_COMOVERLOAD:
     case MON_WIZOVERLOAD:
     case MON_FATOVERLOAD:
-#ifdef _DEBUG
-	if(mes.time() == 203)
-		int a = 2;
-#endif
         OnComoverload(ALL_MODULES);
+        break;
+    case MON_SPIDER_GATE_LOST:
+        OnSpiderGateLost(mes);
         break;
     case MON_SEIZURE:
         OnSeizure(mes);
@@ -415,34 +418,48 @@ void CDRBuilding::CCDRBuilder::JournalAnalysisMes(CMonMessageEx& mes)
         }
         break;
 		*/
+    //changed by pax pClock {
     case MON_SPIDER_TCP_DOWN:
         {
-            TClock clock = *(mes.getParameterTimePtr(readPos));
+            const TClock* pClock = mes.getParameterTimePtr(readPos);
             sprintf(sInfo, "[%02d-%02d-20%02d %02d:%02d:%02d]   Прервано TCP соединение с SComm'ом",
-                clock.Date,clock.Month,clock.Year,clock.Hours,clock.Minutes,clock.Seconds);
+                pClock->Date,pClock->Month,pClock->Year,
+                pClock->Hours,pClock->Minutes,pClock->Seconds);
+        }
+        break;
+    case MON_SPIDER_BAD_PACKET:
+        {
+            const TClock* pClock = mes.getParameterTimePtr(readPos);
+            sprintf(sInfo, "[%02d-%02d-20%02d %02d:%02d:%02d]   Получен BAD_PACKET от SComm'а",
+                pClock->Date,pClock->Month,pClock->Year,
+                pClock->Hours,pClock->Minutes,pClock->Seconds);
         }
         break;
     case MON_SPIDER_USER_STOP:
         {
-            TClock clock = *(mes.getParameterTimePtr(readPos));
+            const TClock* pClock = mes.getParameterTimePtr(readPos);
             sprintf(sInfo, "[%02d-%02d-20%02d %02d:%02d:%02d]   SMPSpider был остановлен пользователем",
-                clock.Date,clock.Month,clock.Year,clock.Hours,clock.Minutes,clock.Seconds);
+                pClock->Date,pClock->Month,pClock->Year,
+                pClock->Hours,pClock->Minutes,pClock->Seconds);
         }
         break;
     case MON_SPIDER_TCP_UP:
         {
-            TClock clock = *(mes.getParameterTimePtr(readPos));
+            const TClock* pClock = mes.getParameterTimePtr(readPos);
             sprintf(sInfo, "[%02d-%02d-20%02d %02d:%02d:%02d]   Восстановлено TCP соединение с SComm'ом",
-                clock.Date,clock.Month,clock.Year,clock.Hours,clock.Minutes,clock.Seconds);
+                pClock->Date,pClock->Month,pClock->Year,
+                pClock->Hours,pClock->Minutes,pClock->Seconds);
         }
         break;
     case MON_SPIDER_START:
         {
-            TClock clock = *(mes.getParameterTimePtr(readPos));
+            const TClock* pClock = mes.getParameterTimePtr(readPos);
             sprintf(sInfo, "[%02d-%02d-20%02d %02d:%02d:%02d]   SMPSpider был запущен",
-                clock.Date,clock.Month,clock.Year,clock.Hours,clock.Minutes,clock.Seconds);
+                pClock->Date,pClock->Month,pClock->Year,
+                pClock->Hours,pClock->Minutes,pClock->Seconds);
         }
         break;
+    //changed by pax pClock }
     default: ;
                 
     }
@@ -1582,6 +1599,15 @@ void CDRBuilding::CCDRBuilder::OnSpiderModuleDown(CMonMessageEx& mes)
 	ResetModuleInfo(btMod);
 }
 
+void CDRBuilding::CCDRBuilder::OnSpiderGateLost(CMonMessageEx& mes)
+{
+    // module:BYTE  time:TClock
+    int readPos = 0;    // mes.clearReadPosition();
+    BYTE btMod = mes.getParameterByte(readPos);
+    myASSERT(btMod < MAX_MOD);
+    OnComoverload(btMod);
+}
+
 void CDRBuilding::CCDRBuilder::ReleaseCalls(BYTE btMod)
 {
     //отбиваем звонки в случае утери модуля или падения TCP
@@ -1736,7 +1762,7 @@ void CDRBuilding::CCDRBuilder::ReleaseCall(CDRBuilding::strCallInfo* pCall, BYTE
     {
         char sTmp[MAX_LEN_NUMBER];
         sTmp[0] = 0;
-        strcpy(sTmp, pCall->InUnit.acCdPN[0] ? pCall->InUnit.acCdPN : pCall->OutUnit.acCdPN);
+        strcpy(sTmp, pCall->OutUnit.acCdPN[0] ? pCall->OutUnit.acCdPN : pCall->InUnit.acCdPN);
         if(IsInnerNumber(sTmp, false))
             sprintf(CDR.STrunkOutInfo.sTrunk, "%s%s", PREFIX_SUBSCRIBER, sTmp);
         else
@@ -2474,14 +2500,26 @@ void CDRBuilding::CCDRBuilder::OnCombine(CMonMessageEx& mes)
 void CDRBuilding::CCDRBuilder::MakeCDR(const CDRBuilding::strCDR& CDR)
 {
 	char sStr[1000];
+    //формируем дату и время начала звонка
     TClock cl;
-
 	if(CDR.dwTalkDuration == 0)
 		cl = CDR.timeSeizIn;
 	else
 		cl = AddToClock(CDR.timeSeizIn, (int)(CDR.dwSeizDurationIn - CDR.dwTalkDuration));
 	char sBegTalkDateTime[100];
 	sprintf(sBegTalkDateTime, "%02d-%02d-%02d %02d:%02d:%02d", cl.Date, cl.Month, cl.Year, cl.Hours, cl.Minutes, cl.Seconds);
+
+    if(m_SSettings.bDeleteFirstDigitFromAON)
+    {
+        if(strncmp(CDR.STrunkInInfo.sTrunk, PREFIX_SUBSCRIBER, 1) == 0)
+        {//если абонент звонит
+            if(CDR.STrunkInInfo.sCgPN[0] != 0)
+                strcpy((char*)CDR.STrunkInInfo.sCgPN, CDR.STrunkInInfo.sCgPN + 1);
+            if(CDR.STrunkOutInfo.sCgPN[0] != 0)
+                strcpy((char*)CDR.STrunkOutInfo.sCgPN, CDR.STrunkOutInfo.sCgPN + 1);
+        }
+    }
+
 #define PCGPN_IN	CDR.STrunkInInfo.sCgPN[0] ? CDR.STrunkInInfo.sCgPN : m_SSettings.sNoNumberString
 #define PCDPN_IN	CDR.STrunkInInfo.sCdPN[0] ? CDR.STrunkInInfo.sCdPN : m_SSettings.sNoNumberString
 #define PCGPN_OUT	CDR.STrunkOutInfo.sCgPN[0] ? CDR.STrunkOutInfo.sCgPN : m_SSettings.sNoNumberString
@@ -2503,6 +2541,7 @@ void CDRBuilding::CCDRBuilder::MakeCDR(const CDRBuilding::strCDR& CDR)
 		AddCDRString(sStr);
         break;
     case FORMAT_CDR_TARIF2002:
+        // 0x02C015105 C025510 83512781615 13-02-04 12:52:47 300 16
 		pCgPN = CDR.STrunkInInfo.sCgPN[0] ? CDR.STrunkInInfo.sCgPN :(CDR.STrunkOutInfo.sCgPN[0] ? CDR.STrunkOutInfo.sCgPN : m_SSettings.sNoNumberString);
 		pCdPN = CDR.STrunkInInfo.sCdPN[0] ? CDR.STrunkInInfo.sCdPN :(CDR.STrunkOutInfo.sCdPN[0] ? CDR.STrunkOutInfo.sCdPN : m_SSettings.sNoNumberString);
 		sprintf(sStr, "%s%s %s %s %s %d %d", m_SSettings.bWriteBinary2 ? "\x02" : "", 
@@ -2640,7 +2679,7 @@ void CDRBuilding::CCDRBuilder::MakeCDR(const CDRBuilding::strCDR& CDR)
 			}
 		}
 		break;
-	case FROMAT_CDR_KHARITONOV:
+	case FORMAT_CDR_KHARITONOV:
 		{
 			//формируем дату и время конца звонка
 			if(CDR.dwTalkDuration == 0)
@@ -2658,7 +2697,7 @@ void CDRBuilding::CCDRBuilder::MakeCDR(const CDRBuilding::strCDR& CDR)
 			AddCDRString(sStr);
 		}
 		break;
-	case FROMAT_CDR_RASPOL:
+	case FORMAT_CDR_RASPOL:
 		//12.01.2007;16:00:01;015101;015224;3311456;-;8495464372;00:00:12;16
 		{
 			pCgPN = CDR.STrunkInInfo.sCgPN[0] ? CDR.STrunkInInfo.sCgPN :(CDR.STrunkOutInfo.sCgPN[0] ? CDR.STrunkOutInfo.sCgPN : m_SSettings.sNoNumberString);
@@ -2698,7 +2737,7 @@ void CDRBuilding::CCDRBuilder::MakeCDR(const CDRBuilding::strCDR& CDR)
 			AddCDRString(sStr);
 		}
 		break;
-	case FROMAT_CDR_CERTIFICATION:
+	case FORMAT_CDR_CERTIFICATION:
 		{
 			//045_3145281_153_2245689_04-03-2003_16:55:39_265
 			//045_3145281_153_2245689_04-03-2003_16:55:39_X02
@@ -2750,7 +2789,7 @@ void CDRBuilding::CCDRBuilder::MakeCDR(const CDRBuilding::strCDR& CDR)
 			AddCDRString(sStr);
 		}
 		break;
-	case FROMAT_CDR_RASPOL_OUT:
+	case FORMAT_CDR_RASPOL_OUT:
 		//12.01.2007;16:00:01;015101;015224;3311456;-;8495464372;00:00:12;16
 		{
 			pCgPN = CDR.STrunkOutInfo.sCgPN[0] ? CDR.STrunkOutInfo.sCgPN :(CDR.STrunkInInfo.sCgPN[0] ? CDR.STrunkInInfo.sCgPN : m_SSettings.sNoNumberString);
@@ -2790,7 +2829,7 @@ void CDRBuilding::CCDRBuilder::MakeCDR(const CDRBuilding::strCDR& CDR)
 			AddCDRString(sStr);
 		}
 		break;
-	case FROMAT_CDR_RASPOL_INOUT:
+	case FORMAT_CDR_RASPOL_INOUT:
 		//АОН исходящий, набранный номер - входящий
 		//12.01.2007;16:00:01;015101;015224;3311456;-;8495464372;00:00:12;16
 		{
@@ -2832,7 +2871,7 @@ void CDRBuilding::CCDRBuilder::MakeCDR(const CDRBuilding::strCDR& CDR)
 			AddCDRString(sStr);
 		}
 		break;
-	case FROMAT_CDR_RASPOL_SUBSAON:
+	case FORMAT_CDR_RASPOL_SUBSAON:
 		//при исходящем вызове от абонента ставится его АОН, а не NumberA абонента
 		//при входящем вызове на абонента ставится входящий набранный номер, а не а не NumberA абонента
 		//12.01.2007;16:00:01;015101;015224;3311456;-;8495464372;00:00:12;16
@@ -2876,17 +2915,122 @@ void CDRBuilding::CCDRBuilder::MakeCDR(const CDRBuilding::strCDR& CDR)
 			AddCDRString(sStr);
 		}
 		break;
-	case FROMAT_CDR_SAMPLE_MODE:
+	case FORMAT_CDR_SAMPLE_MODE:
 		{
 			char* s = m_SSettings.sSampleString;
 		}
 		break;
+    case FORMAT_CDR_TARIFF2000:
+        // 0x02C015105 C025510 83512781615 13-02-04 12:52:47 300
+        pCgPN = CDR.STrunkInInfo.sCgPN[0] ? CDR.STrunkInInfo.sCgPN :(CDR.STrunkOutInfo.sCgPN[0] ? CDR.STrunkOutInfo.sCgPN : m_SSettings.sNoNumberString);
+        pCdPN = CDR.STrunkInInfo.sCdPN[0] ? CDR.STrunkInInfo.sCdPN :(CDR.STrunkOutInfo.sCdPN[0] ? CDR.STrunkOutInfo.sCdPN : m_SSettings.sNoNumberString);
+        //от СЛ отрезаем первые три цифры
+        if(strncmp(CDR.STrunkInInfo.sTrunk, PREFIX_TRUNK, 1) == 0)
+        {
+            strcpy((char*)CDR.STrunkInInfo.sTrunk + 1, CDR.STrunkInInfo.sTrunk + 1 + 3);
+        }
+        if(strncmp(CDR.STrunkOutInfo.sTrunk, PREFIX_TRUNK, 1) == 0)
+        {
+            strcpy((char*)CDR.STrunkOutInfo.sTrunk + 1, CDR.STrunkOutInfo.sTrunk + 1 + 3);
+        }
+
+        sprintf(sStr, "%s%s %s %s %s %d", m_SSettings.bWriteBinary2 ? "\x02" : "", 
+            CDR.STrunkInInfo.sTrunk, CDR.STrunkOutInfo.sTrunk, pCdPN,
+            sBegTalkDateTime, CDR.dwTalkDuration);
+        AddCDRString(sStr);
+        break;
+    case FORMAT_CDR_BGBILLING:
+        {
+            char sDateTime[100];
+            sprintf(sDateTime, "%02d.%02d.20%02d %02d:%02d:%02d", cl.Date, cl.Month, cl.Year, cl.Hours, cl.Minutes, cl.Seconds);
+            const char* pA = CDR.STrunkInInfo.sCgPN[0] ? CDR.STrunkInInfo.sCgPN :(CDR.STrunkOutInfo.sCgPN[0] ? CDR.STrunkOutInfo.sCgPN : m_SSettings.sNoNumberString);
+            const char* pAOut = CDR.STrunkOutInfo.sCgPN[0] ? CDR.STrunkOutInfo.sCgPN :(CDR.STrunkInInfo.sCgPN[0] ? CDR.STrunkInInfo.sCgPN : m_SSettings.sNoNumberString);
+            const char* pB = CDR.STrunkInInfo.sCdPN[0] ? CDR.STrunkInInfo.sCdPN :(CDR.STrunkOutInfo.sCdPN[0] ? CDR.STrunkOutInfo.sCdPN : m_SSettings.sNoNumberString);
+            const char* pBOut = CDR.STrunkOutInfo.sCdPN[0] ? CDR.STrunkOutInfo.sCdPN :(CDR.STrunkInInfo.sCdPN[0] ? CDR.STrunkInInfo.sCdPN : m_SSettings.sNoNumberString);
+            std::string sA164 = GetFormat164(pAOut, m_SSettings.sA164);
+            std::string sB164 = GetFormat164(pBOut, m_SSettings.sB164);
+
+            char* sPort_from = (char*)CDR.STrunkInInfo.sTrunk;
+            if(sPort_from[0] != PREFIX_TRUNK[0])
+            {
+                sPort_from[0] = '0';
+                sPort_from[1] = 0;
+            }
+            else
+            {
+                strcpy(sPort_from, sPort_from+1);
+            }
+            char* sPort_to = (char*)CDR.STrunkOutInfo.sTrunk;
+            if(sPort_to[0] != PREFIX_TRUNK[0])
+            {
+                sPort_to[0] = '0';
+                sPort_to[1] = 0;
+            }
+            else
+            {
+                strcpy(sPort_to, sPort_to+1);
+            }
+            const char* sCateg = "0";
+            char sDuration[50];
+            //changed by pax to sprintf
+            //itoa(CDR.dwTalkDuration, sDuration, 10);
+            sprintf(sDuration,"%u",CDR.dwTalkDuration);
+            sprintf(sStr, "%s %s %s %s %s %s %s %s %s %s",
+                sDateTime, sDuration, pA, sA164.c_str(), pB, sB164.c_str(), 
+                sPort_from, sPort_to, sCateg, sDuration);
+            bool bWasFirstDatetimeSpace = false;
+            for(int i = 0; i < strlen(sStr); i++)
+            {
+                if(sStr[i] == ' ')
+                {
+                    if(bWasFirstDatetimeSpace)
+                        sStr[i] = '\t';
+                    else
+                        bWasFirstDatetimeSpace = true;
+                }
+            }
+            AddCDRString(sStr);
+        }
+        break;
     default:
 		if(! m_dwLastError && ERROR_UNKNOWN_CDR_FORMAT )
 			m_dwLastError += ERROR_UNKNOWN_CDR_FORMAT;
         AddErrorString("Неизвестный формат выходного файла");
     }
 
+}
+
+std::string CDRBuilding::CCDRBuilder::GetFormat164(const char* sNumber, std::string s164Prefix)
+{
+    std::string s164 = "";
+    if(s164Prefix.empty())
+    {
+        s164 = sNumber;
+        return s164;
+    }
+
+    std::string stNumber = sNumber;
+    if(strlen(sNumber) > 10)
+    {//проверяем на отрезание мг и мн префиксов
+        if(strncmp(sNumber, "810", 3) == 0)
+            stNumber = sNumber + 3;
+        else
+            if(strncmp(sNumber, "8", 1) == 0 && strlen(sNumber) > 10)
+                stNumber = sNumber + 1;
+    }
+
+    if(stNumber.length() < 11 && s164Prefix.length()+stNumber.length() >= 11)
+    {
+        for(int i = 0; i + stNumber.length() < 11; i++)
+            s164.push_back(s164Prefix[i]);
+        s164 += stNumber;
+
+    }
+    else
+    {
+        s164 = stNumber;
+    }
+    return s164;
 }
 
 std::string CDRBuilding::CCDRBuilder::GetStringParameterBySample(const char* sSample, const CDRBuilding::strCDR& CDR)
@@ -3086,6 +3230,22 @@ void CDRBuilding::CCDRBuilder::OnDvoRedirect(CMonMessageEx& mes)
             strcpy(pCall->acRedirBuf + iBeg, sNumStr);
         }
     }
+    DeleteSpaces(pCall->acRedirBuf);
+}
+
+void CDRBuilding::CCDRBuilder::DeleteSpaces(char* pStr)
+{
+    char sBuffer[1000];
+    int k = 0;
+    for(int i = 0; i <= strlen(pStr); i++)
+    {
+        if(pStr[i] != ' ')
+        {
+            sBuffer[k] = pStr[i];
+            k++;
+        }
+    }
+    strcpy(pStr, sBuffer);
 }
 
 CDRBuilding::strCallInfo* CDRBuilding::CCDRBuilder::GetPBegListCall(void)
@@ -3166,3 +3326,9 @@ void CDRBuilding::CCDRBuilder::CopyList(CDRBuilding::TPCharList& lstDest, const 
 		else WARNING;
 	}
 }
+
+bool CDRBuilding::CCDRBuilder::IsBilling2000Mode(void)
+{
+    return m_SSettings.bBill2000;
+}
+

@@ -1,41 +1,18 @@
-#ifndef __SMP_TYPE_H__
-#define __SMP_TYPE_H__
+#ifndef __TYPE_H__
+#define __TYPE_H__
 
 #ifdef  ARM
     #include  <memory.h>
 #else
     #ifdef __GNUC__
-         #include  <iostream.h>
-        //#define _ATS_ //changed by pax
+        #ifdef ARMLINUX
+            #define ARM
+            #define __ARM__
+        #endif
+        #include  <string.h>
     #else
         #define _WIN_
     #endif
-#endif
-
-#ifdef  ARMLINUX
-    #define LRW(X) _LRW(&(X))
-    #define LRS(X) _LRS(&(X))
-    #define LRD(X) _LRD(&(X))
-    #define LRI(X) _LRI(&(X))
-
-    #define LXW(X, Y) _LXW(&(X), (Y))
-    #define LXS(X, Y) _LXS(&(X), (Y))
-    #define LXD(X, Y) _LXD(&(X), (Y))
-    #define LXI(X, Y) _LXI(&(X), (Y))
-
-    #define LARMCHECK(X)  {if (_LARMCHECK(X)) WARNING;}
-#else
-    #define LRW(X) (X)
-    #define LRS(X) (X)
-    #define LRD(X) (X)
-    #define LRI(X) (X)
-
-    #define LXW(X, Y) ((X) = (Y))
-    #define LXS(X, Y) ((X) = (Y))
-    #define LXD(X, Y) ((X) = (Y))
-    #define LXI(X, Y) ((X) = (Y))
-
-    #define LARMCHECK(X)
 #endif
 
 #define DEV_NONE 0
@@ -62,17 +39,12 @@
 
 //    typedef char BOOL;
 
-#ifndef __ARM_LINUX_KERNEL__
-  #ifndef NULL
     #define NULL 0
-  #endif
-#endif
+
     #define LOWORD(X) ((WORD)(X))
     #define HIWORD(X) ((WORD)((X)>>16))
 
-#ifndef ARMLINUX
     #pragma pack(1)
-#endif
 
 #endif
 
@@ -84,18 +56,12 @@ typedef unsigned short  WORD  ; // 16
 typedef unsigned char   BYTE  ; //  8
 typedef unsigned char   uc;
 
-inline  unsigned int armAlign(unsigned int n) {
-    return (4-n) & 0x00000003;
-};
-
 
 //#define TRUE  1
 //#define FALSE 0
 
 #define VLOWORD(X) (*(WORD*)&(X))
 #define VHIWORD(X) (*(((WORD*)&(X))+1))
-
-#define GCSPLAPDVERSION 51
 
 #ifdef _WIN_
 
@@ -148,10 +114,8 @@ inline  unsigned int armAlign(unsigned int n) {
 
 typedef     short           TState;         //
 typedef     unsigned short  TBlock;         // идентификатор сигнального процесса (в локальном физическом модуле)
-#ifndef __ARM_LINUX_KERNEL__
 const       TState          InvalidState            = (TState)-1;
 const       TState          InvalidStateID          = (TState)-1;
-#endif
 
 // Типы
 typedef     char            TModule;        // до '99
@@ -178,7 +142,7 @@ typedef     unsigned long   TCallID;        // идентификатор вызова. Тарификация
 typedef     unsigned long   TCallPointID;   // Идентификатор точки звонка. Сорм.
 typedef     unsigned char   TCauseValue;    // причина отбоя
 
-#ifndef __ARM_LINUX_KERNEL__
+
 // Базы индексов для унификации пересчета
 const   THiIdx  HiIdx_base_Slot                         = 1;
 const   THiIdx  HiIdx_base_PCM                          = 50+1;
@@ -226,20 +190,5 @@ const   unsigned char   FullBlockMask = BlockMask_LocalMaintenance  |
 inline unsigned char makeBlockMask(unsigned char type, unsigned char block) {
     return (0x01 << ((2*block) + type));
 }
-
-
-WORD _LRW ( WORD* X );
-short _LRS ( short* X );
-DWORD _LRD ( DWORD* X );
-int _LRI ( int* X );
-
-void _LXW ( WORD* X, WORD Y );
-void _LXS ( short* X, short Y );
-void _LXD ( DWORD* X, DWORD Y );
-void _LXI ( int* X, int Y );
-
-bool _LARMCHECK ( void* X );
-#endif
-
 
 #endif

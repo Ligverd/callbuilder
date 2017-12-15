@@ -33,8 +33,10 @@ unsigned char* CMonMessageEx::encode(unsigned char* stream) const
 {
     *stream++   = time_;                    // относительное время в секундах
     
-    LXD(*(DWORD*)stream, id_);
-    stream += sizeof(DWORD);
+    *stream++   = (unsigned char)(id_ & 0xFF);            // идентификатор вызова
+    *stream++   = (unsigned char)((id_ >> 8) & 0xFF);
+    *stream++   = (unsigned char)((id_ >> 16) & 0xFF);
+    *stream++   = (unsigned char)((id_ >> 24) & 0xFF);
 
     *stream++   = message_;                 // мессага
 
@@ -49,8 +51,10 @@ unsigned char* CMonMessageEx::decode(unsigned char* stream, int size)
 
     time_ = *stream++;                      // относительное время в секундах
 
-    id_ = LRD(*(DWORD*)stream);
-    stream += sizeof(DWORD);
+    id_ = *stream++;                        // идентификатор вызова
+    id_ |= *stream++ << 8;
+    id_ |= *stream++ << 16;
+    id_ |= *stream++ << 24;
 
     message_ = *stream++;                    // мессага
     size -= 6;
@@ -322,6 +326,21 @@ bool  CMonMessageEx::monMessageToText(char* pTextBuffer, int iTextBufferSize) co
             const TClock* pClock = getParameterTimePtr(readPos);
             sprintf(sInfo, "SPIDER_TCP_DOWN     [%02d-%02d-20%02d %02d:%02d:%02d]",
                 pClock->Date, pClock->Month, pClock->Year, pClock->Hours, pClock->Minutes, pClock->Seconds);
+        }
+        break;
+    case MON_SPIDER_BAD_PACKET:
+        {
+            const TClock* pClock = getParameterTimePtr(readPos);
+            sprintf(sInfo, "SPIDER_BAD_PACKET   [%02d-%02d-20%02d %02d:%02d:%02d]",
+                pClock->Date, pClock->Month, pClock->Year, pClock->Hours, pClock->Minutes, pClock->Seconds);
+        }
+        break;
+    case MON_SPIDER_GATE_LOST:
+        {
+            BYTE btMod=getParameterByte(readPos);
+            const TClock* pClock = getParameterTimePtr(readPos);
+            sprintf(sInfo, "SPIDER_GATE_LOST    [%02d-%02d-20%02d %02d:%02d:%02d]  mod:%02d",
+                pClock->Date, pClock->Month, pClock->Year, pClock->Hours, pClock->Minutes, pClock->Seconds, btMod);
         }
         break;
     case MON_SPIDER_USER_STOP:

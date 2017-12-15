@@ -196,6 +196,7 @@ const   TUniPar UNIPAR_ISUP_ContinuityIndicators            = 0x78;
 const   TUniPar UNIPAR_ISUP_KhazahTarifZone                 = 0x79;
 const   TUniPar UNIPAR_ISUP_CallReference                   = 0x7A;
 const   TUniPar UNIPAR_ISUP_ApplicationTransport            = 0x7B;
+const   TUniPar UNIPAR_CUGInterlockCode                     = 0x7C;
 
 // Интелект. маршрутизация
 const   TUniPar UNIPAR_INTELROUTE_PATH                      = 0x80;
@@ -254,6 +255,7 @@ const   unsigned char   DVOCode_CP                  = 0x32;     // Call pickup
 const   unsigned char   DVOCode_CC                  = 0x33;     // Consultation call
 // жоп-коды испоьзуюься например в сорм для отложенных операций
 //const   unsigned char   DVOCode_CWworked            = 0xF8;     //  Третий вызов в паре CW
+const   unsigned char   DVOCode_SerialCall          = 0xF8;     // переадресованный вызов с серийника
 const   unsigned char   DVOCode_3PTYcall1           = 0xF9;     //
 const   unsigned char   DVOCode_3PTYcall2           = 0xFA;     //
 const   unsigned char   DVOCode_3PTYpreRelease      = 0xFB;     //
@@ -267,16 +269,6 @@ const char* getDVOCodeText(unsigned char DVOCode);
 //
 class CUniPar
 {
-    private:
-        short       Len;
-        TSignalling Signalling;
-        char        specdummy;
-        BYTE Buf[MAX_SIZE_PARAMETER];
-
-        static short       stLen;
-        static TSignalling stSignalling;
-        static char        stBuf[MAX_SIZE_PARAMETER];
-
     public:
 
         // Созидание
@@ -288,7 +280,7 @@ class CUniPar
         static void  addByte ( TUniPar uniPar, BYTE data );
         static void  addWord ( TUniPar uniPar, WORD data );
         static void  addDWord ( TUniPar uniPar, DWORD data );
-        static void* addBuffer(TUniPar uniPar, const void* buf, BYTE len, bool fCheckSize = true);
+        static void* addBuffer(TUniPar uniPar, const void* buf, BYTE len);
         static void  addString ( TUniPar uniPar, const char *str );
         static void  addFlag ( TUniPar uniPar );
         static void  addNumber(TUniPar uniPar, const UniN::Number& num);
@@ -336,6 +328,14 @@ class CUniPar
     private:
         short getPos ( TUniPar uniPar ) const;
 
+    private:
+        short Len;
+        TSignalling Signalling;
+        BYTE Buf[MAX_SIZE_PARAMETER];
+
+        static short stLen;
+        static TSignalling stSignalling;
+        static char stBuf[MAX_SIZE_PARAMETER];
 };
 
 //

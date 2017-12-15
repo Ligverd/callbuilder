@@ -36,7 +36,7 @@ char sMessage[128];
 
 void get_time_str(char* tm_str, tm T)
 {
-    sprintf(tm_str,"[%02d-%02d-%04d %02d:%02d:%02d]",T.tm_mday,T.tm_mon,(T.tm_year+1900),T.tm_hour,T.tm_min,T.tm_sec);
+  sprintf(tm_str,"[%02d-%02d-%04d %02d:%02d:%02d]",T.tm_mday,T.tm_mon+1,(T.tm_year+1900),T.tm_hour,T.tm_min,T.tm_sec);
 }
 
 bool StrToLog(const char* str)
@@ -121,7 +121,7 @@ int Login_ethernet(const char *ip, in_addr_t port)
     }
     memcpy(&sock_addr.sin_addr, host->h_addr_list[0], sizeof(sock_addr.sin_addr));
 
-    int state;
+    int state = 0;
     struct timeval tout;
 
     tout.tv_sec = 20;
@@ -178,7 +178,7 @@ int Login_ethernet(const char *ip, in_addr_t port)
     return fd;
 }
 
-char* GetConnectStr(int i)
+const char* GetConnectStr(int i)
 {
     switch(i)
     {
@@ -437,6 +437,7 @@ void WriteStringsOnLine(const char* sDir ,const char* sFileName, CDRBuilding::TP
                 struct timeval tv;
                 fd_set wset;
                 int retval;
+                int count = 0;
                 do 
                 {
                     tv.tv_sec = 1;
@@ -450,7 +451,8 @@ void WriteStringsOnLine(const char* sDir ,const char* sFileName, CDRBuilding::TP
                         getsockopt(connect_point[i + MAX_CONNECT_POINT/2],SOL_SOCKET,SO_ERROR,&ERROR,&opt_size);
                         if(ERROR == 0)
                         {
-                            DWORD temp_len = strlen(sTmp);
+                            //esli v peredi stroki ponadobitsia dlinna
+                            //DWORD temp_len = strlen(sTmp);
                             //write(connect_point[i + MAX_CONNECT_POINT/2], &temp_len, sizeof(DWORD));
                             write(connect_point[i + MAX_CONNECT_POINT/2], sTmp, strlen(sTmp));
                         }
@@ -462,14 +464,15 @@ void WriteStringsOnLine(const char* sDir ,const char* sFileName, CDRBuilding::TP
                             break;
                         }
                     }
-                    else if(retval < 0 /*&& errno != EINTR*/)
+                    else if(retval < 0 && errno != EINTR)
                     {
                         close(connect_point[i + MAX_CONNECT_POINT/2]);
                         connect_point[i + MAX_CONNECT_POINT/2] = 0;
                         Loger("Client socket internal error!\n");
                         break;
                     }
-                } while(retval<=0);
+                    count++;
+                } while (retval < 0 && count < 2);
             }
 
             if(Parser.rotation != ROTATION_ONLINE)
@@ -480,7 +483,7 @@ void WriteStringsOnLine(const char* sDir ,const char* sFileName, CDRBuilding::TP
                     sprintf(log,"Error: can't write to file:%s!\n",path);
                     Loger(log);
                 }
-                if(i)
+                if(i) //Esli ne log
                 {
                     for(int j = 0; j < strlen(sTmp); j++)
                         sTmp[j] = ConvertTable(sTmp[j]);
@@ -693,7 +696,7 @@ int RestoreMessage(const DWORD dwLen, CDRBuilding::TPCharList& lstStr)
 
 void Visualisation(const char* sCurrFileName)
 {
-    printf("\n<-------------------------------Callbuilder v0.5.1---------------------------->\n");
+    printf("\n<-------------------------------Callbuilder v0.5.4---------------------------->\n");
 
     if (Parser.sSpiderIp) 
     {
@@ -739,15 +742,26 @@ void Visualisation(const char* sCurrFileName)
     if(Parser.sLogFileName) printf("Log file name:%s\n",Parser.sLogFileName);
     if(Parser.sErrFileName) printf("Err file name:%s\n",Parser.sErrFileName);
     if(Parser.sJrnFileName) printf("Jrn file name:%s\n",Parser.sJrnFileName);
-    if(!Parser.pSSettings.bWriteUnansweredCalls) printf("Unanswered calls are not writing!\n");
-    if(!Parser.pSett.bEnable) printf("Journal is off!\n");
-    printf("Journal maximum busy duration %d\n",Parser.pSett.iMaxDuration);
-    if(!Parser.pSSettings.bWriteBinary2) printf("No binary 2 at logfile strings!\n");
+    if(!Parser.SSettings.bWriteUnansweredCalls) printf("Unanswered calls are not writing!\n");
+    if(!Parser.Sett.bEnable) printf("Journal is off!\n");
+    printf("Journal maximum busy duration %d\n",Parser.Sett.iMaxDuration);
+    if(!Parser.SSettings.bWriteBinary2) printf("No binary 2 at logfile strings!\n");
     if(!Parser.fConvert) printf("No converted files!\n");
     if(Parser.fRem_rm3) printf("Removing rm3 files after success!\n");
-    printf("CDR string format:%d\n",Parser.pSSettings.btCDRStringFormat);
-    if(strcmp(Parser.pSSettings.sNoNumberString,"-"))
-        printf("No number string separator:\"%s\"\n",Parser.pSSettings.sNoNumberString);
+    printf("CDR string format:%d\n",Parser.SSettings.btCDRStringFormat);
+    if(strcmp(Parser.SSettings.sNoNumberString,"-"))
+        printf("No number string separator:\"%s\"\n",Parser.SSettings.sNoNumberString);
+    if(Parser.SPrefix.bCutPrefix)
+        printf("Cut prefix:%s\n",Parser.SPrefix.sPrefix);
+    if(!Parser.lstLocalNumbers.empty())
+    {
+        printf("Inner numbers:\n");
+        CDRBuilding::TListInterval::const_iterator it;
+        for (it = Parser.lstLocalNumbers.begin(); it != Parser.lstLocalNumbers.end(); it++)
+        {
+            printf("%s-%s\n", it->beg, it->end);
+        }
+    }
     printf("<--------------------------------------------------------------------------->\n\n");
 }
 
@@ -766,11 +780,11 @@ void *Server_ptread(void* arg)
     struct sockaddr_in client_addr;
     socklen_t client_addr_size = sizeof(client_addr);
     int retval;
-    int i,maxfd;
+    int i, maxfd = 0;
     while(1)
     {
         FD_ZERO(&fds);
-        for (i = 0; i < MAX_CONNECT_POINT; i++) 
+        for (i = 0; i < MAX_CONNECT_POINT; i++) //3 servers and 3 clients
         {
             if (connect_point[i] > 0) 
             {
@@ -868,6 +882,7 @@ void get_file_names(char *output, const char *base)
     }
 }
 
+
 int main(int argc, char *argv[])
 {
     /*
@@ -902,12 +917,30 @@ int main(int argc, char *argv[])
         printf("Not odd adr0:%x adr:%x val:%x\n",(DWORD)&bt[0],(DWORD)&bt[0], dw);
     }
     */
+    /*
+    char test[80], blah[80];
+     char *sep = "\\/:;=-";
+     char *word, *phrase, *brkt, *brkb, *b1 = test, *b2 = blah;
+
+     strcpy(test, "This;/is.a:test:of=the/string\\tokenizer-function.");
+
+     for (word = strtok_r(test, sep, &brkt); word; word = strtok_r(NULL, sep, &brkt))
+     {
+         strcpy(blah, "blah:;;blat:blab:blag");
+
+         for (phrase = strtok_r(blah, sep, &brkb); phrase; phrase = strtok_r(NULL, sep, &brkb))
+         {
+             printf("So far we're at{} %s:%s\n", word, phrase);
+         }
+     }
+    */
+
     if (Parser.ParseCStringParams(argc, argv) < 0)
         exit(EXIT_FAILURE);
 
-    builder.SetCommonSettings(&Parser.pSSettings);
-    builder.SetJournalSettings(&Parser.pSett);
-
+    builder.SetCommonSettings(&Parser.SSettings);
+    builder.SetJournalSettings(&Parser.Sett);
+    builder.SetLocalNumbersSettings(Parser.lstLocalNumbers, &Parser.SPrefix);
     CDRBuilding::TPCharList lstStr;
 
     int dwTmp;
@@ -922,7 +955,7 @@ int main(int argc, char *argv[])
         if (!Parser.ServerPort)
             Parser.ServerPort = Parser.SpiderPort + 1;
 
-        if (Parser.FillOnLineParams("cdr_log") < 0)
+        if (Parser.FillOnLineParams(Parser.sTfsFileNameBase) < 0)
             exit(EXIT_FAILURE);
 
         StrToLog("Callbuilder started....\n");
@@ -1020,8 +1053,8 @@ int main(int argc, char *argv[])
 
             if (Parser.rotation && Parser.rotation != ROTATION_ONLINE) // esli faili drobiatsia po date
             {
-                char file_names[20];
-                get_file_names(file_names,"cdr_log");
+                char file_names[200];
+                get_file_names(file_names, Parser.sTfsFileNameBase);
 
                 if(Parser.FillOnLineParams(file_names) < 0)
                 {
@@ -1066,12 +1099,17 @@ int main(int argc, char *argv[])
 
     else if (!Parser.TfsFileList.empty()) //File mode
     {
+        printf("Callbuilder: processing %d file(s)\n",Parser.TfsFileList.size());
         CDRBuilding::TPCharList::const_iterator it;
         for (it = Parser.TfsFileList.begin(); it != Parser.TfsFileList.end(); it++)
         {
-
             if (Parser.FillMainParams(*it) < 0)
-                continue;
+            {
+                if(Parser.TfsFileList.size() > 1)
+                    continue;
+                else
+                    exit(EXIT_FAILURE);
+            }
 
             Parser.RefreshResidFileName();
             Visualisation(*it);
@@ -1081,7 +1119,10 @@ int main(int argc, char *argv[])
             if ((fd_tfs = open(path, O_RDONLY)) <= 0)
             {
                 printf("Error: can't open file:%s!\n", path);
-                continue;
+                if(Parser.TfsFileList.size() > 1)
+                    continue;
+                else
+                    exit(EXIT_FAILURE);
             }
 
             off_t MainFilelen = 0;
