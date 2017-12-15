@@ -22,11 +22,11 @@
 void CDialog::RemoveFiles(CParser &Parser)
 {
 	char path[256];
-	sprintf(path,"%s%s",Parser.sOutDir,Parser.sLogFile);
+	sprintf(path,"%s%s",Parser.sOutDir,Parser.sLogFileName);
 	remove(path);
-	sprintf(path,"%s%s",Parser.sOutDir,Parser.sErrFile);
+	sprintf(path,"%s%s",Parser.sOutDir,Parser.sErrFileName);
 	remove(path);
-	sprintf(path,"%s%s",Parser.sOutDir,Parser.sJrnFile);
+	sprintf(path,"%s%s",Parser.sOutDir,Parser.sJrnFileName);
 	remove(path);
 }
 
@@ -77,8 +77,11 @@ bool CDialog::WriteStringsToFile(const char* sDir ,const char* sFileName, CDRBui
 void CDialog::ErrorActions(CParser &Parser, const CDRBuilding::CCDRBuilder &builder, char* sMessage)
 {
 		printf("%s",sMessage);
-		CDialog::Converter(Parser.sOutDir, Parser.sErrFile);
-		CDialog::Converter(Parser.sOutDir, Parser.sJrnFile);
+		if (Parser.fConvert)
+		{
+			CDialog::Converter(Parser.sOutDir, Parser.sErrFileName);
+			CDialog::Converter(Parser.sOutDir, Parser.sJrnFileName);
+		}
 		//сохраняем оставшиеся звонки
 		Parser.RefreshResidFileName();
 		SaveResiduaryCalls(Parser.sFreshResidFile, builder);
@@ -156,11 +159,11 @@ void CDialog::RestoreMessage(int &fd_tfs, CParser &Parser, CDRBuilding::CCDRBuil
 	sprintf(sTmpJrnStr, "Error message lengh (%d) at address:0x%08X ", dwLen, iReadBytes);
 	//запись в err
 	lstStr.push_back(sTmpJrnStr);
-	if(!WriteStringsToFile(Parser.sOutDir, Parser.sErrFile, lstStr))
+	if(!WriteStringsToFile(Parser.sOutDir, Parser.sErrFileName, lstStr))
 	{
 		close(fd_tfs);
 		ErrorActions(Parser, builder, "Error: can't write to err-file\n");
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 	builder.FreeListMem(lstStr);
 	//может это tfs-файл со флжшки, тогда можно попытаться поискать сообщение ALIVE
@@ -179,7 +182,7 @@ void CDialog::RestoreMessage(int &fd_tfs, CParser &Parser, CDRBuilding::CCDRBuil
 		{
 			close(fd_tfs);
 			ErrorActions(Parser, builder, "Error: can't find correct message lengh\n");
-			exit(1);
+			exit(EXIT_FAILURE);
 		}
 		iCnt++;
 		iReadBytes++;
@@ -195,11 +198,11 @@ void CDialog::RestoreMessage(int &fd_tfs, CParser &Parser, CDRBuilding::CCDRBuil
 			sprintf(sTmpJrnStr, "Found correct message lengh (%d) after %d bytes", iSpiderStartLen,iCnt);
 			//запись в err
 			lstStr.push_back(sTmpJrnStr);
-			if(!WriteStringsToFile(Parser.sOutDir, Parser.sErrFile, lstStr))
+			if(!WriteStringsToFile(Parser.sOutDir, Parser.sErrFileName, lstStr))
 			{
 				close(fd_tfs);
 				ErrorActions(Parser, builder, "Error: can't write to err-file\n");
-				exit(1);
+				exit(EXIT_FAILURE);
 			}
 			builder.FreeListMem(lstStr);
 			dwLen = dwMesLen;
@@ -210,7 +213,7 @@ void CDialog::RestoreMessage(int &fd_tfs, CParser &Parser, CDRBuilding::CCDRBuil
 
 void CDialog::Visualisation(CParser &Parser)
 {
-	printf("\n<-------------------------------Callbuilder v0.3---------------------------->\n\n");
+	printf("\n<-------------------------------Callbuilder v0.4---------------------------->\n\n");
 	if(Parser.sMainFile)
 	{
 		printf("Main tfs file:%s\n",Parser.sMainFile);
@@ -235,16 +238,23 @@ void CDialog::Visualisation(CParser &Parser)
 			}
 		}
 	}
+	//if(Parser.sMainDir) printf("Main directory:%s\n",Parser.sMainDir);
 	if(Parser.sResidFile) printf("Residuary file:%s\n",Parser.sResidFile);
 	if(Parser.sOutDir) printf("Output directory:%s\n",Parser.sOutDir);
 	//if(Parser.sFileName) printf("Name of files:%s\n",Parser.sFileName);
-	if(Parser.sLogFile) printf("Log file name:%s\n",Parser.sLogFile);
-	if(Parser.sErrFile) printf("Err file name:%s\n",Parser.sErrFile);
-	if(Parser.sJrnFile) printf("Jrn file name:%s\n",Parser.sJrnFile);
+	if(Parser.sLogFileName) printf("Log file name:%s\n",Parser.sLogFileName);
+	if(Parser.sErrFileName) printf("Err file name:%s\n",Parser.sErrFileName);
+	if(Parser.sJrnFileName) printf("Jrn file name:%s\n",Parser.sJrnFileName);
 	//if(Parser.sSpiderIp) printf("Spider ip address:%s\n",Parser.sSpiderIp);
 	if(!Parser.pSSettings.bWriteUnansweredCalls) printf("Unanswered calls are not writing!\n");
 	if(!Parser.pSett.bEnable) printf("Journal is off!\n");
 	if(Parser.fMaxDurChanged) printf("Journal maximum busy duration %u\n",Parser.pSett.iMaxDuration);
+	if(!Parser.pSSettings.bWriteBinary2) printf("No binary 2 at logfile strings!\n");
+	if(!Parser.fConvert) printf("No converted files!\n");
+	if(Parser.fRem_rm3) printf("Removing rm3 files after success!\n");
+	if(Parser.fFormatChanged) printf("CDR string format:%d\n",Parser.pSSettings.btCDRStringFormat);
+	if(strcmp(Parser.pSSettings.sNoNumberString,"-"))
+		printf("No number string separator:\"%s\"\n",Parser.pSSettings.sNoNumberString);
 	printf("\n<--------------------------------------------------------------------------->\n\n");
 }
 

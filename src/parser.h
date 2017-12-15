@@ -23,22 +23,26 @@ class CParser
 {
 	static int check_d(const char *str);
 public:
+	char* sMainDir;
 	char* sOutDir;
-	char* sSpiderIp;
 	char* sMainFile;
 	char* sResidFile;
-	char* sLogFile;
-	char* sErrFile;
-	char* sJrnFile;
 	char* sFreshResidFile;
-	char* sFileName;
+	char* sLogFileName;
+	char* sErrFileName;
+	char* sJrnFileName;
+	char* sMainFileName;
+	char* sSpiderIp;
 	unsigned char tfsFileType;
 	struct CDRBuilding::strJournalSettings pSett;
 	bool fMaxDurChanged;
+	bool fFormatChanged;
 	struct CDRBuilding::strCDRBuilderSettings pSSettings;
 	tm Tm;
 	int RefreshResidFileName (void);
 	int ParseCStringParams (int argc, char *argv[]);
+	bool fConvert;
+	bool fRem_rm3;
 	CParser();
 	~CParser();
 };

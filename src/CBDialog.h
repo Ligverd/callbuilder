@@ -23,14 +23,13 @@ class CDialog
 {
 	static char ConvertTable(const char c);
 public:
-	static void CDialog::RemoveFiles(CParser &Parser);
+	static void RemoveFiles(CParser &Parser);
 	static bool WriteStringsToFile(const char* sDir, const char* sFileName, CDRBuilding::TPCharList lst);
 	static void ErrorActions(CParser& Parser, const CDRBuilding::CCDRBuilder& builder, char* sMessage);
-	static int CDialog::SaveResiduaryCalls(const char* sFileName, const CDRBuilding::CCDRBuilder& builder);
-	static int CDialog::PutResiduaryCalls(const char* sFileName, CDRBuilding::CCDRBuilder& builder);
-	static void CDialog::RestoreMessage(int &fd_tfs, CParser &Parser, CDRBuilding::CCDRBuilder& builder, DWORD
+	static int SaveResiduaryCalls(const char* sFileName, const CDRBuilding::CCDRBuilder& builder);
+	static int PutResiduaryCalls(const char* sFileName, CDRBuilding::CCDRBuilder& builder);
+	static void RestoreMessage(int &fd_tfs, CParser &Parser, CDRBuilding::CCDRBuilder& builder, DWORD
 	&iReadBytes, DWORD &dwLen, CDRBuilding::TPCharList &lstStr);
-	static void CDialog::Visualisation(CParser &Parser);
+	static void Visualisation(CParser &Parser);
 	static int Converter(const char* sDir ,const char* sFileName);
-	
 };

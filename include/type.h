@@ -22,7 +22,7 @@
     #define LXD(X, Y) _LXD(&(X), (Y))
     #define LXI(X, Y) _LXI(&(X), (Y))
 
-    #define LARMCHECK(X) _LARMCHECK(X)
+    #define LARMCHECK(X)  {if (_LARMCHECK(X)) WARNING;}
 #else
     #define LRW(X) (X)
     #define LRS(X) (X)
@@ -34,7 +34,7 @@
     #define LXD(X, Y) ((X) = (Y))
     #define LXI(X, Y) ((X) = (Y))
 
-    #define LARMCHECK(X) _LARMCHECK(X)
+    #define LARMCHECK(X)
 #endif
 
 #define DEV_NONE 0
@@ -83,12 +83,18 @@ typedef unsigned short  WORD  ; // 16
 typedef unsigned char   BYTE  ; //  8
 typedef unsigned char   uc;
 
+inline  unsigned int armAlign(unsigned int n) {
+    return (4-n) & 0x00000003;
+};
+
 
 //#define TRUE  1
 //#define FALSE 0
 
 #define VLOWORD(X) (*(WORD*)&(X))
 #define VHIWORD(X) (*(((WORD*)&(X))+1))
+
+#define GCSPLAPDVERSION 51
 
 #ifdef _WIN_
 
@@ -231,7 +237,7 @@ void _LXS ( short* X, short Y );
 void _LXD ( DWORD* X, DWORD Y );
 void _LXI ( int* X, int Y );
 
-void _LARMCHECK ( void* X );
+bool _LARMCHECK ( void* X );
 #endif
 
 

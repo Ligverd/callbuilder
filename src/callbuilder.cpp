@@ -22,19 +22,18 @@
 extern char **environ;
 using namespace std;
 
-#define day 86400
 int main(int argc, char *argv[])
 {
 	CParser Parser;
 	if(Parser.ParseCStringParams(argc, argv) <0)
-		exit(1);
+		exit(EXIT_FAILURE);
 	Parser.RefreshResidFileName();
 	CDialog::Visualisation(Parser);
 	int fd_tfs;
 	if ((fd_tfs = open(Parser.sMainFile, O_RDONLY)) <= 0)
 	{
-		printf("Error: can't open tfs file!\n");
-		exit(1);
+		printf("Error: can't open tfs file:%s!\n",Parser.sMainFile);
+		exit(EXIT_FAILURE);
 	}
 	
 	off_t MainFilelen = 0;
@@ -67,7 +66,7 @@ int main(int argc, char *argv[])
 			{ 
 				close(fd_tfs);
 				CDialog::ErrorActions(Parser, builder, "Error: error while reading message size!\n");
-				exit(1);
+				exit(EXIT_FAILURE);
 			}
 			break;
 		}
@@ -85,7 +84,7 @@ int main(int argc, char *argv[])
 		{
 			close(fd_tfs);
 			CDialog::ErrorActions(Parser, builder, "Error: error while reading message!\n");
-			exit(1);
+			exit(EXIT_FAILURE);
 		}
 		iReadBytes += dwLen;
 
@@ -109,29 +108,29 @@ int main(int argc, char *argv[])
 	
 		//zapis mesagi v faili
 		builder.GetErrorList(lstStr);
-		if(!CDialog::WriteStringsToFile(Parser.sOutDir,Parser.sErrFile,lstStr))
+		if(!CDialog::WriteStringsToFile(Parser.sOutDir,Parser.sErrFileName,lstStr))
 		{
 			close(fd_tfs);
 			CDialog::ErrorActions(Parser, builder, "Error: can't write to err-file\n");
-			exit(1);
+			exit(EXIT_FAILURE);
 		}
 		builder.FreeListMem(lstStr);
 
 		builder.GetJournalList(lstStr);
-		if(!CDialog::WriteStringsToFile(Parser.sOutDir,Parser.sJrnFile,lstStr))
+		if(!CDialog::WriteStringsToFile(Parser.sOutDir,Parser.sJrnFileName,lstStr))
 		{
 			close(fd_tfs);
 			CDialog::ErrorActions(Parser, builder, "Error: can't write to jrn-file\n");
-			exit(1);
+			exit(EXIT_FAILURE);
 		}
 		builder.FreeListMem(lstStr);
 
 		builder.GetCDRList(lstStr);
-		if(!CDialog::WriteStringsToFile(Parser.sOutDir,Parser.sLogFile,lstStr))
+		if(!CDialog::WriteStringsToFile(Parser.sOutDir,Parser.sLogFileName,lstStr))
 		{
 			close(fd_tfs);
 			CDialog::ErrorActions(Parser, builder, "Error: can't write to jrn-file\n");
-			exit(1);
+			exit(EXIT_FAILURE);
 		}
 		builder.FreeListMem(lstStr);
 
@@ -152,7 +151,7 @@ int main(int argc, char *argv[])
 			{
 				close(fd_tfs);
 				CDialog::ErrorActions(Parser, builder, sTmp);
-				exit(1);
+				exit(EXIT_FAILURE);
 			}
 		}
 		if((iReadBytes >= RdPersent*(MainFilelen/4)))
@@ -166,8 +165,15 @@ int main(int argc, char *argv[])
 	CDialog::SaveResiduaryCalls(Parser.sFreshResidFile, builder);
 	builder.CleanCalls();
 	printf("Processing complete!\n");
-	CDialog::Converter(Parser.sOutDir, Parser.sErrFile);
-	CDialog::Converter(Parser.sOutDir, Parser.sJrnFile);
+	if (Parser.fConvert)
+	{
+		CDialog::Converter(Parser.sOutDir, Parser.sErrFileName);
+		CDialog::Converter(Parser.sOutDir, Parser.sJrnFileName);
+	}
+	if (Parser.fRem_rm3)
+	{
+		remove(Parser.sResidFile);
+	}
 	return EXIT_SUCCESS;
 }
 

@@ -21,15 +21,16 @@
 #include "callbuilder.h"
 CParser::CParser()
 {
+	sMainDir = NULL;
 	sOutDir = NULL;
-	sSpiderIp = NULL;
 	sMainFile = NULL;
 	sResidFile = NULL;
-	sFileName = NULL;
 	sFreshResidFile = NULL;
-	sLogFile = NULL;
-	sErrFile = NULL;
-	sJrnFile = NULL;
+	sLogFileName = NULL;
+	sErrFileName = NULL;
+	sJrnFileName = NULL;
+	sMainFileName = NULL;
+	sSpiderIp = NULL;
 	tfsFileType = 0;
 	memset(&Tm, 0, sizeof(tm));	
 
@@ -41,20 +42,24 @@ CParser::CParser()
 	pSSettings.bWriteUnansweredCalls = true;
 	strcpy(pSSettings.sNoNumberString,"-");
 	pSSettings.btCDRStringFormat = FORMAT_CDR_EX;
+	fFormatChanged = false;
 	pSSettings.bDecrementDuration = false;
 	pSSettings.sSampleString[0] = 0;
+	fConvert = true;
+	fRem_rm3 = false;
 }
 CParser::~CParser()
 {
-	free(sOutDir);
-	free(sSpiderIp);
-	free(sMainFile);
-	free(sResidFile);
-	free(sLogFile);
-	free(sErrFile);
-	free(sJrnFile);
-	free(sFreshResidFile);
-	free(sFileName);
+	if(sMainDir) free(sMainDir);
+	if(sOutDir) free(sOutDir);
+	if(sMainFile) free(sMainFile);
+	if(sResidFile) free(sResidFile);
+	if(sFreshResidFile) free(sFreshResidFile);
+	if(sLogFileName) free(sLogFileName);
+	if(sErrFileName) free(sErrFileName);
+	if(sJrnFileName) free(sJrnFileName);
+	if(sMainFileName) free(sMainFileName);
+	if(sSpiderIp) free(sSpiderIp);
 }
 
 int CParser::check_d(const char *str)
@@ -80,39 +85,39 @@ int CParser::RefreshResidFileName()
 	switch(tfsFileType)
 	{
 		case 1://day
-			if(!sFileName) RETURNW;
+			if(!sMainFileName) RETURNW;
 			T.tm_year -= 1900;
 			itime = mktime (&T);
 			itime += 86400;
 			localtime_r(&itime,&T);
-			sprintf(str,"%s%s_%02d_%02d_%04d.rm3",sOutDir,sFileName,T.tm_mday,T.tm_mon+1,T.tm_year+1900);
+			sprintf(str,"%s%s_%02d_%02d_%04d.rm3",sMainDir,sMainFileName,T.tm_mday,T.tm_mon+1,T.tm_year+1900);
 		break;
 		case 2://mon
-			if(!sFileName) RETURNW;
+			if(!sMainFileName) RETURNW;
 			T.tm_mon++;
 			if(T.tm_mon > 11)
 			{
 				T.tm_mon = 0;
 				T.tm_year++;
 			}
-			sprintf(str,"%s%s_mon_%02d_%04d.rm3",sOutDir,sFileName,T.tm_mon+1,T.tm_year);
+			sprintf(str,"%s%s_mon_%02d_%04d.rm3",sMainDir,sMainFileName,T.tm_mon+1,T.tm_year);
 		break;
 		case 3://dec
-			if(!sFileName) RETURNW;
+			if(!sMainFileName) RETURNW;
 			T.tm_yday++;
 			if(T.tm_yday > 37)
 			{
 				T.tm_yday = 1;
 				T.tm_year++;
 			}
-			sprintf(str,"%s%s_dec_%02d_%04d.rm3",sOutDir,sFileName,T.tm_yday,T.tm_year);
+			sprintf(str,"%s%s_dec_%02d_%04d.rm3",sMainDir,sMainFileName,T.tm_yday,T.tm_year);
 		break;
 		case 4://realtime
 			T.tm_year += 100;
 			itime = mktime (&T);
 			itime += 86400;
 			localtime_r(&itime,&T);
-			sprintf(str,"%s%02d_%02d_%01d.rm3",sOutDir,T.tm_mday,T.tm_mon+1,T.tm_year-100);
+			sprintf(str,"%s%02d_%02d_%01d.rm3",sMainDir,T.tm_mday,T.tm_mon+1,T.tm_year-100);
 		break;
 		default:
 			RETURNERR("Parser: Error tfs file type!\n");
@@ -128,7 +133,7 @@ int CParser::RefreshResidFileName()
 int CParser::ParseCStringParams (int argc, char *argv[])
 {
 	unsigned char i;
-	for( i=1; i<argc-1; i++)
+	for( i=1; i<argc; i++)
 	{
 		if(!strcmp(argv[i],"-outdir"))
 		{
@@ -145,7 +150,6 @@ int CParser::ParseCStringParams (int argc, char *argv[])
 			sSpiderIp = (char*)malloc(strlen(argv[i])+1);
 			if (!sSpiderIp)
 				RETURNERR("Parser: No memory for parsing parameter: -spiderip!\n");
-			//memset(sSpiderIp, 0, strlen(argv[i])+1);
 			strcpy(sSpiderIp,argv[i]);
 		}
 		else if(!strcmp(argv[i],"-nojournal"))
@@ -162,8 +166,23 @@ int CParser::ParseCStringParams (int argc, char *argv[])
 			}
 			else
 				RETURNERR("Parser: Incorrect duration value!\n");
-			//memset(sSpiderIp, 0, strlen(argv[i])+1);
-			strcpy(sSpiderIp,argv[i]);
+		}
+		else if(!strcmp(argv[i],"-cdrformat"))
+		{
+			i++;
+			BYTE fr = atoi(argv[i]);
+			if (check_d(argv[i]) && fr && fr < 19)
+			{
+				pSSettings.btCDRStringFormat = fr;
+				fFormatChanged = true;
+			}
+			else
+				RETURNERR("Parser: Incorrect CDR format!\n");
+		}
+		else if(!strcmp(argv[i],"-nonumstr"))
+		{
+			i++;
+			strcpy(pSSettings.sNoNumberString,argv[i]);
 		}
 		else if(!strcmp(argv[i],"/0"))
 		{
@@ -173,12 +192,22 @@ int CParser::ParseCStringParams (int argc, char *argv[])
 		{
 			pSSettings.bWriteBinary2 = false;
 		}
+		else if(!strcmp(argv[i],"-noconvert"))
+		{
+			fConvert = false;
+		}
+		else if(!strcmp(argv[i],"-remrm3"))
+		{
+			fRem_rm3 = true;
+		}
 		else if(!strcmp(argv[i],"-tfsfile"))
 		{
 			i++;
+//1.Getting sMainFile
 			char* ext;
 			if(!(ext = strrchr( argv[i], (int)'/')))
 			{
+				/*
 				int j;
 				char *pwd = NULL;
 				for(j = 0; environ[j], !pwd; j++)
@@ -194,7 +223,7 @@ int CParser::ParseCStringParams (int argc, char *argv[])
 						strcat(sMainFile,argv[i]);
 					}
 				}
-				if(!pwd)
+				if(!pwd)*/
 					RETURNERR("Parser: enter full path of tfs file!\n");
 			}
 			else
@@ -204,6 +233,13 @@ int CParser::ParseCStringParams (int argc, char *argv[])
 					RETURNERR("Parser: No memory for parsing parameter: -tfsfile!\n");
 				strcpy(sMainFile,argv[i]);
 			}
+//2.Getting sMainDir
+			sMainDir = (char*)malloc(strlen(sMainFile)-strlen(strrchr( sMainFile, (int)'/')+1)+1);
+			if (!sMainDir)
+				RETURNERR("Parser: No memory for parameter maindir!\n");
+			memset(sMainDir,0,strlen(sMainFile)-strlen(strrchr( sMainFile, (int)'/')+1)+1);
+			memmove(sMainDir,sMainFile,strlen(sMainFile)-strlen(strrchr( sMainFile, (int)'/')+1));
+			//Getting sResidFile
 			sResidFile = (char*)malloc(strlen(sMainFile)+1);
 			if (!sResidFile)
 				RETURNERR("Parser: No memory to genrate residuary file name!\n");
@@ -218,34 +254,37 @@ int CParser::ParseCStringParams (int argc, char *argv[])
 				else RETURNERR("Parser: Main file not tfs!\n");
 			}
 			else RETURNERR("Parser: Main file have no extention!\n");
-			
+
+//3.Getting sLogFileName, sErrFileName, sJrnFileName 			
 //получим имя файла name_01_02_2004.tfs | name_mon02_2004.tfs | name_dec02_2004.tfs | 12_10_6.TFS
 			ext = new char[strlen(strrchr( sMainFile, (int)'/')+1)+1];
 			if (!ext)
 				RETURNERR("Parser: No memory to determine tfs file type!\n");
 			memmove(ext, strrchr(sMainFile, (int)'/')+1, strlen(strrchr( sMainFile, (int)'/')+1)+1);//with 0
-			
-			sLogFile = (char*)malloc(strlen(ext)+1);
-			if (!sLogFile)
+
+			sLogFileName = (char*)malloc(strlen(ext)+1);
+			if (!sLogFileName)
 				RETURNERR("Parser: No memory to create log file name!\n");
 
-			sErrFile = (char*)malloc(strlen(ext)+1);
-			if (!sErrFile)
+			sErrFileName = (char*)malloc(strlen(ext)+1);
+			if (!sErrFileName)
 				RETURNERR("Parser: No memory to create err file name!\n");
 
-			sJrnFile = (char*)malloc(strlen(ext)+1);
-			if (!sJrnFile)
+			sJrnFileName = (char*)malloc(strlen(ext)+1);
+			if (!sJrnFileName)
 				RETURNERR("Parser: No memory to create jrn file name!\n");
 
 			char *str = strrchr( ext, (int)'.');
 			memset(str,0,strlen(str)); //name_01_02_2004 | name_mon02_2004 | name_dec02_2004 | 12_10_6
 			
-			strcpy(sLogFile,ext);
-			strcat(sLogFile,".log");
-			strcpy(sErrFile,ext);
-			strcat(sErrFile,".err");
-			strcpy(sJrnFile,ext);
-			strcat(sJrnFile,".jrn");
+			strcpy(sLogFileName,ext);
+			strcat(sLogFileName,".log");
+			strcpy(sErrFileName,ext);
+			strcat(sErrFileName,".err");
+			strcpy(sJrnFileName,ext);
+			strcat(sJrnFileName,".jrn");
+
+//4.Getting sMainFileName and tfstype 
 			//выясняем что за ротация у открываемого файла
 			//name_01_02_2004.tfs 1
 			//name_mon02_2004.tfs 2
@@ -269,20 +308,20 @@ int CParser::ParseCStringParams (int argc, char *argv[])
 				Tm.tm_mon = --tmptm;
 				tfsFileType = 2;
 				memset(str,0,strlen(str)); //name
-				sFileName = (char*)malloc(strlen(ext)+1);
-				if (!sFileName)
+				sMainFileName = (char*)malloc(strlen(ext)+1);
+				if (!sMainFileName)
 					RETURNW;
-				memmove(sFileName, ext, strlen(ext)+1);
+				memmove(sMainFileName, ext, strlen(ext)+1);
 			}
 			else if(strstr(str+1,"dec") && (tmptm = atoi(str+4)))
 			{
 				Tm.tm_yday = tmptm;
 				tfsFileType = 3;
 				memset(str,0,strlen(str)); //name
-				sFileName = (char*)malloc(strlen(ext)+1);
-				if (!sFileName)
+				sMainFileName = (char*)malloc(strlen(ext)+1);
+				if (!sMainFileName)
 					RETURNW;
-				memmove(sFileName, ext, strlen(ext)+1);
+				memmove(sMainFileName, ext, strlen(ext)+1);
 			}
 			else if(tmptm =  atoi(str+1))
 			{
@@ -294,10 +333,10 @@ int CParser::ParseCStringParams (int argc, char *argv[])
 					Tm.tm_mday = tmptm;
 					tfsFileType = 1;
 					memset(str,0,strlen(str)); //name
-					sFileName = (char*)malloc(strlen(ext)+1);
-					if (!sFileName)
+					sMainFileName = (char*)malloc(strlen(ext)+1);
+					if (!sMainFileName)
 						RETURNW;
-					memmove(sFileName, ext, strlen(ext)+1);
+					memmove(sMainFileName, ext, strlen(ext)+1);
 				}
 				else if (tmptm = atoi(ext))
 				{ 
@@ -314,11 +353,10 @@ int CParser::ParseCStringParams (int argc, char *argv[])
 		RETURNERR("Parser: No imput file!\n");
 	if(!sOutDir)
 	{
-		sOutDir = (char*)malloc(strlen(sMainFile)-strlen(strrchr( sMainFile, (int)'/')+1)+1);
-		memset(sOutDir,0,strlen(sMainFile)-strlen(strrchr( sMainFile, (int)'/')+1)+1);
+		sOutDir = (char*)malloc(strlen(sMainDir)+1);
 		if (!sOutDir)
 			RETURNERR("Parser: No memory for parameter outdir!\n");
-		memmove(sOutDir,sMainFile,strlen(sMainFile)-strlen(strrchr( sMainFile, (int)'/')+1));
+		strcpy(sOutDir,sMainDir);
 	}
 	return 1;
 }
